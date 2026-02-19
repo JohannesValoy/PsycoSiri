@@ -1,0 +1,9 @@
+{
+  "uuid": "aether@user",
+  "name": "Aether AI Assistant",
+  "description": "AI assistant with voice, tools, memory, and CLI access for GNOME",
+  "shell-version": ["48", "49"],
+  "version": 1,
+  "url": "",
+  "settings-schema": "org.gnome.shell.extensions.aether"
+}

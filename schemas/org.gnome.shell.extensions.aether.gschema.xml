@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist>
+  <schema id="org.gnome.shell.extensions.aether"
+          path="/org/gnome/shell/extensions/aether/">
+
+    <!-- Keybinding -->
+    <key name="toggle-overlay" type="as">
+      <default>['&lt;Control&gt;space']</default>
+      <summary>Toggle overlay</summary>
+      <description>Keybinding to toggle the Aether overlay popup</description>
+    </key>
+
+    <!-- Provider configuration (JSON string) -->
+    <key name="providers" type="s">
+      <default>'{}'</default>
+      <summary>AI Providers</summary>
+      <description>JSON object mapping provider IDs to their configuration (name, apiKey, baseUrl)</description>
+    </key>
+
+    <key name="active-provider" type="s">
+      <default>''</default>
+      <summary>Active provider ID</summary>
+    </key>
+
+    <key name="active-model" type="s">
+      <default>''</default>
+      <summary>Active model identifier</summary>
+    </key>
+
+    <!-- Context / Summarization -->
+    <key name="auto-summarize" type="b">
+      <default>true</default>
+      <summary>Auto-summarize context</summary>
+      <description>Automatically summarize old context when approaching token limits</description>
+    </key>
+
+    <key name="summarize-threshold" type="d">
+      <default>0.7</default>
+      <summary>Summarization threshold</summary>
+      <description>Fraction of max context tokens at which to trigger auto-summarization (0.0-1.0)</description>
+    </key>
+
+    <key name="max-context-tokens" type="i">
+      <default>128000</default>
+      <summary>Max context tokens</summary>
+      <description>Maximum context window size in tokens for the active model</description>
+    </key>
+
+    <!-- Voice -->
+    <key name="tts-enabled" type="b">
+      <default>false</default>
+      <summary>Enable TTS</summary>
+      <description>Read AI responses aloud using text-to-speech</description>
+    </key>
+
+    <key name="tts-voice" type="s">
+      <default>'alloy'</default>
+      <summary>TTS voice</summary>
+    </key>
+
+    <key name="stt-model-path" type="s">
+      <default>''</default>
+      <summary>Whisper model path</summary>
+      <description>Path to the whisper.cpp GGML model file</description>
+    </key>
+
+    <!-- UI -->
+    <key name="stealth-mode" type="b">
+      <default>false</default>
+      <summary>Stealth mode</summary>
+      <description>Hide all visible indicators; only accessible via hotkey</description>
+    </key>
+
+    <!-- System prompt -->
+    <key name="system-prompt" type="s">
+      <default>'You are Aether, an AI assistant embedded in the GNOME desktop on Fedora. You have access to tools to execute commands, manage files, search the web, and more. Always be concise.'</default>
+      <summary>System prompt</summary>
+    </key>
+
+    <!-- Search -->
+    <key name="serper-api-key" type="s">
+      <default>''</default>
+      <summary>Serper API Key</summary>
+      <description>API key for Serper.dev Google Search</description>
+    </key>
+
+    <key name="search-max-results" type="i">
+      <default>5</default>
+      <summary>Search max results</summary>
+      <description>Maximum number of search results to return (1-20)</description>
+    </key>
+
+    <!-- Database -->
+    <key name="db-path" type="s">
+      <default>''</default>
+      <summary>Database path</summary>
+      <description>Path to SQLite database. Empty uses default ~/.config/aether/aether.db</description>
+    </key>
+
+    <!-- Agent configurations (JSON string) -->
+    <key name="agent-configs" type="s">
+      <default>'{}'</default>
+      <summary>Agent Configurations</summary>
+      <description>JSON object mapping agent IDs to their configuration (name, providerId, modelId, systemPrompt)</description>
+    </key>
+
+  </schema>
+</schemalist>

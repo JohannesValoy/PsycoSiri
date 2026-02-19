@@ -1,0 +1,167 @@
+#!/usr/bin/env python3
+"""
+Aether CLI — Command-line interface for the Aether GNOME Shell extension.
+
+Communicates with the running extension via D-Bus.
+
+Usage:
+    aether "open chrome"                  # Send a message to the AI
+    aether --todo "buy groceries"         # Add a todo
+    aether --todos                        # List todos
+    aether --complete 3                   # Complete todo #3
+    aether --memory "I prefer dark mode"  # Store a memory
+    aether --toggle                       # Toggle the overlay
+    aether --status                       # Get extension status
+"""
+
+import sys
+import argparse
+import json
+
+try:
+    import dbus
+except ImportError:
+    print("Error: python-dbus is required. Install with: sudo dnf install python3-dbus", file=sys.stderr)
+    sys.exit(1)
+
+
+DBUS_NAME = "org.gnome.Shell.Extensions.Aether"
+DBUS_PATH = "/org/gnome/Shell/Extensions/Aether"
+DBUS_IFACE = "org.gnome.Shell.Extensions.Aether"
+
+
+def get_interface():
+    """Connect to the Aether D-Bus service."""
+    try:
+        bus = dbus.SessionBus()
+        proxy = bus.get_object("org.gnome.Shell", DBUS_PATH)
+        return dbus.Interface(proxy, DBUS_IFACE)
+    except dbus.exceptions.DBusException as e:
+        # Try the standalone name
+        try:
+            bus = dbus.SessionBus()
+            proxy = bus.get_object(DBUS_NAME, DBUS_PATH)
+            return dbus.Interface(proxy, DBUS_IFACE)
+        except dbus.exceptions.DBusException:
+            print(
+                "Error: Could not connect to Aether. Is the GNOME extension enabled?",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Aether AI Assistant CLI",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=__doc__,
+    )
+
+    parser.add_argument(
+        "message",
+        nargs="?",
+        help="Message to send to the AI assistant",
+    )
+    parser.add_argument(
+        "--todo",
+        metavar="TEXT",
+        help="Add a todo item",
+    )
+    parser.add_argument(
+        "--todos",
+        action="store_true",
+        help="List all todo items",
+    )
+    parser.add_argument(
+        "--complete",
+        metavar="ID",
+        type=int,
+        help="Mark a todo item as completed",
+    )
+    parser.add_argument(
+        "--memory",
+        metavar="TEXT",
+        help="Store a memory/note",
+    )
+    parser.add_argument(
+        "--toggle",
+        action="store_true",
+        help="Toggle the Aether overlay",
+    )
+    parser.add_argument(
+        "--status",
+        action="store_true",
+        help="Get extension status info",
+    )
+    parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Output in JSON format where applicable",
+    )
+
+    args = parser.parse_args()
+
+    if not any([args.message, args.todo, args.todos, args.complete,
+                args.memory, args.toggle, args.status]):
+        parser.print_help()
+        sys.exit(0)
+
+    iface = get_interface()
+
+    try:
+        if args.message:
+            response = iface.SendMessage(args.message)
+            print(response)
+
+        elif args.todo:
+            todo_id = iface.AddTodo(args.todo)
+            print(f"Todo added (ID: {todo_id})")
+
+        elif args.todos:
+            result = iface.ListTodos()
+            todos = json.loads(result)
+
+            if args.json:
+                print(json.dumps(todos, indent=2))
+            else:
+                if not todos:
+                    print("No todos found.")
+                else:
+                    for t in todos:
+                        status_icon = {
+                            "pending": "[ ]",
+                            "in_progress": "[~]",
+                            "completed": "[x]",
+                        }.get(t.get("status", "pending"), "[ ]")
+                        priority = t.get("priority", 5)
+                        print(f"  #{t['id']} {status_icon} (p{priority}) {t['content']}")
+
+        elif args.complete is not None:
+            iface.CompleteTodo(args.complete)
+            print(f"Todo #{args.complete} completed.")
+
+        elif args.memory:
+            iface.AddMemory("note", args.memory)
+            print("Memory stored.")
+
+        elif args.toggle:
+            iface.Toggle()
+
+        elif args.status:
+            result = iface.GetStatus()
+            status = json.loads(result)
+
+            if args.json:
+                print(json.dumps(status, indent=2))
+            else:
+                print(f"Session: {status.get('session_id', 'N/A')}")
+                print(f"Messages: {status.get('messages', 0)}")
+                print(f"Provider: {status.get('provider', 'N/A')}")
+
+    except dbus.exceptions.DBusException as e:
+        print(f"D-Bus error: {e}", file=sys.stderr)
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()
