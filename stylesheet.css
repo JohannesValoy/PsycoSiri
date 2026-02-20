@@ -360,10 +360,15 @@
 /* Output scroll area */
 .aether-output-scroll {
   padding: 0 14px;
+  overflow-x: auto;
+  overflow-y: auto;
 }
 
 .aether-output-box {
-  padding: 4px 0 6px 0;
+  padding: 12px 0 14px 0;
+  max-width: 100%;
+  width: 100%;
+  overflow: hidden;
 }
 
 /* ──────────────────────────────────────────────
@@ -372,16 +377,21 @@
 
 .aether-bubble {
   border-radius: 18px;
-  padding: 10px 16px;
+  padding: 12px 16px;
   max-width: 560px;
+  width: 560px;
+  overflow: hidden;
+  margin-bottom: 14px;
 }
 
 .aether-bubble-user {
   margin-left: 70px;
+  margin-top: 6px;
 }
 
 .aether-bubble-assistant {
   margin-right: 50px;
+  margin-top: 6px;
 }
 
 .aether-bubble-role {
@@ -407,6 +417,8 @@
   border-radius: 10px;
   padding: 10px 12px;
   margin: 4px 0;
+  overflow-x: auto;
+  max-width: 100%;
 }
 
 .aether-code-block-header {
@@ -760,4 +772,88 @@
   color: rgba(255, 255, 255, 0.35);
   padding: 12px 4px;
   text-align: center;
+}
+
+/* ──────────────────────────────────────────────
+   Tables
+   ────────────────────────────────────────────── */
+
+.aether-table-container {
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 0;
+  margin: 6px 0;
+  overflow-x: auto;
+}
+
+.aether-table-row {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.aether-table-row:last-child {
+  border-bottom: none;
+}
+
+.aether-table-header {
+  background-color: rgba(255, 255, 255, 0.06);
+}
+
+.aether-table-cell {
+  padding: 8px 12px;
+  min-width: 80px;
+}
+
+.aether-table-cell-header {
+  padding: 10px 12px;
+  min-width: 80px;
+}
+
+.aether-table-cell-text {
+  font-size: 13px;
+}
+
+/* Dark theme tables */
+.aether-panel-dark .aether-table-container {
+  background-color: rgba(0, 0, 0, 0.25);
+  border-color: rgba(255, 255, 255, 0.10);
+}
+
+.aether-panel-dark .aether-table-row {
+  border-bottom-color: rgba(255, 255, 255, 0.06);
+}
+
+.aether-panel-dark .aether-table-header {
+  background-color: rgba(255, 255, 255, 0.08);
+}
+
+.aether-panel-dark .aether-table-cell-text {
+  color: rgba(255, 255, 255, 0.90);
+}
+
+.aether-panel-dark .aether-table-cell-header .aether-table-cell-text {
+  color: rgba(255, 255, 255, 0.95);
+  font-weight: bold;
+}
+
+/* Light theme tables */
+.aether-panel-light .aether-table-container {
+  background-color: rgba(0, 0, 0, 0.02);
+  border-color: rgba(0, 0, 0, 0.08);
+}
+
+.aether-panel-light .aether-table-row {
+  border-bottom-color: rgba(0, 0, 0, 0.05);
+}
+
+.aether-panel-light .aether-table-header {
+  background-color: rgba(0, 0, 0, 0.04);
+}
+
+.aether-panel-light .aether-table-cell-text {
+  color: rgba(30, 30, 30, 0.90);
+}
+
+.aether-panel-light .aether-table-cell-header .aether-table-cell-text {
+  color: rgba(30, 30, 30, 0.95);
+  font-weight: bold;
 }
