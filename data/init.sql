@@ -36,6 +36,16 @@ CREATE TABLE IF NOT EXISTS context_summaries (
   created_at TEXT DEFAULT (datetime('now'))
 );
 
+CREATE TABLE IF NOT EXISTS saved_tasks (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  agent_config_id TEXT NOT NULL,
+  task TEXT NOT NULL,
+  error TEXT,
+  status TEXT DEFAULT 'pending' CHECK(status IN ('pending', 'retried', 'dismissed')),
+  created_at TEXT DEFAULT (datetime('now'))
+);
+
 CREATE INDEX IF NOT EXISTS idx_memories_keywords ON memories(keywords);
 CREATE INDEX IF NOT EXISTS idx_conversations_session ON conversations(session_id);
 CREATE INDEX IF NOT EXISTS idx_todos_status ON todos(status);
+CREATE INDEX IF NOT EXISTS idx_saved_tasks_status ON saved_tasks(status);
