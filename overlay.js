@@ -259,7 +259,7 @@ class AetherOverlay extends St.Widget {
             can_focus: true,
         });
         this._inputBar.set_pivot_point(0.5, 1.0);
-        this._inputBar.get_layout_manager().spacing = 8;
+        this._inputBar.get_layout_manager().spacing = 10;
         this.add_child(this._inputBar);
 
         this._micButton = new St.Button({

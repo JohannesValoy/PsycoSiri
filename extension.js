@@ -35,7 +35,7 @@ export default class AetherExtension extends Extension {
         this._providerManager = new ProviderManager(this._settings);
 
         this._toolRegistry = new ToolRegistry();
-        this._agentManager = new AgentManager(this._settings, this._toolRegistry);
+        this._agentManager = new AgentManager(this._settings, this._toolRegistry, this._memory);
         this._toolRegistry.registerBuiltins(this._memory, this._todoManager, this._settings, this._agentManager);
         this._toolRegistry.loadCustomTools();
 

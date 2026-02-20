@@ -77,6 +77,20 @@
       <summary>System prompt</summary>
     </key>
 
+    <!-- Custom main prompt -->
+    <key name="custom-main-prompt" type="s">
+      <default>''</default>
+      <summary>Custom main prompt</summary>
+      <description>User-defined custom prompt that defines Aether's behavior and personality. If set, this overrides the default system prompt.</description>
+    </key>
+
+    <!-- Include agents in prompt -->
+    <key name="include-agents-in-prompt" type="b">
+      <default>false</default>
+      <summary>Include agent names in prompt</summary>
+      <description>When enabled, automatically injects the list of available agent names into the main prompt</description>
+    </key>
+
     <!-- Search -->
     <key name="serper-api-key" type="s">
       <default>''</default>

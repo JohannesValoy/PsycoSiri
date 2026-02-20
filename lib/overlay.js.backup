@@ -218,12 +218,12 @@ class AetherOverlay extends St.Widget {
         this.add_child(this._messagePanel);
 
         // Header bar (minimal - just title, no container styling)
-        // const headerTitle = new St.Label({
-        // style_class: 'aether-header-title',
-        // text: 'AETHER',
-        // y_align: Clutter.ActorAlign.CENTER,
-        // });
-        // this._messagePanel.add_child(headerTitle);
+        const headerTitle = new St.Label({
+            style_class: 'aether-header-title',
+            text: 'AETHER',
+            y_align: Clutter.ActorAlign.CENTER,
+        });
+        this._messagePanel.add_child(headerTitle);
 
         // Output scroll area (messages)
         this._outputScroll = new St.ScrollView({
@@ -240,7 +240,7 @@ class AetherOverlay extends St.Widget {
             vertical: true,
             x_expand: true,
         });
-        this._outputBox.get_layout_manager().spacing = 10;
+        this._outputBox.get_layout_manager().spacing = 6;
         this._outputScroll.set_child(this._outputBox);
 
         // Status bar (bottom of message panel)

@@ -4,6 +4,8 @@ import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 import {ExtensionPreferences} from 'resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js';
 
+const DEFAULT_SYSTEM_PROMPT = 'You are Aether, an AI assistant embedded in the GNOME desktop on Fedora. You have access to tools to execute commands, manage files, search the web, and more. Always be concise.';
+
 export default class AetherPreferences extends ExtensionPreferences {
     fillPreferencesWindow(window) {
         const settings = this.getSettings();
@@ -210,15 +212,70 @@ export default class AetherPreferences extends ExtensionPreferences {
         });
         searchGroup.add(searchMaxRow);
 
-        const promptGroup = new Adw.PreferencesGroup({title: 'System Prompt'});
+        // Enhanced Main Prompt Section
+        const promptGroup = new Adw.PreferencesGroup({
+            title: 'Main Prompt',
+            description: 'Customize Aether\'s behavior and personality',
+        });
         generalPage.add(promptGroup);
 
-        const promptRow = new Adw.EntryRow({title: 'System Prompt'});
-        promptRow.set_text(settings.get_string('system-prompt'));
-        promptRow.connect('changed', () => {
-            settings.set_string('system-prompt', promptRow.get_text());
+        // Custom main prompt with multi-line text view
+        const customPromptRow = new Adw.ActionRow({
+            title: 'Custom Main Prompt',
+            subtitle: 'Define Aether\'s behavior and personality',
         });
-        promptGroup.add(promptRow);
+        promptGroup.add(customPromptRow);
+
+        // Create expand button for custom prompt
+        const expandButton = new Gtk.Button({
+            icon_name: 'go-next-symbolic',
+            valign: Gtk.Align.CENTER,
+            css_classes: ['flat', 'circular'],
+            tooltip_text: 'Edit custom main prompt',
+        });
+        expandButton.connect('clicked', () => {
+            this._showCustomPromptDialog();
+        });
+        customPromptRow.add_suffix(expandButton);
+
+        // Show current custom prompt status
+        const customPrompt = settings.get_string('custom-main-prompt');
+        const statusLabel = new Gtk.Label({
+            label: customPrompt ? '(Custom)' : '(Default)',
+            css_classes: ['dim-label'],
+            valign: Gtk.Align.CENTER,
+            margin_start: 8,
+        });
+        customPromptRow.add_suffix(statusLabel);
+
+        // Checkbox to include agents in prompt
+        const includeAgentsRow = new Adw.SwitchRow({
+            title: 'Include Available Agents in Prompt',
+            subtitle: 'Automatically inject list of agent names into the main prompt',
+        });
+        settings.bind('include-agents-in-prompt', includeAgentsRow, 'active', Gio.SettingsBindFlags.DEFAULT);
+        promptGroup.add(includeAgentsRow);
+
+        // Reset to default prompt button
+        const resetPromptRow = new Adw.ActionRow({
+            title: 'Reset Main Prompt',
+            subtitle: 'Revert to the default system prompt',
+            activatable: true,
+        });
+        const resetBtn = new Gtk.Button({
+            icon_name: 'view-refresh-symbolic',
+            valign: Gtk.Align.CENTER,
+            css_classes: ['flat', 'circular'],
+            tooltip_text: 'Reset to default prompt',
+        });
+        resetBtn.connect('clicked', () => {
+            this._resetCustomPrompt();
+        });
+        resetPromptRow.add_suffix(resetBtn);
+        resetPromptRow.connect('activated', () => {
+            this._resetCustomPrompt();
+        });
+        promptGroup.add(resetPromptRow);
 
         // ── Memory Page ──
         const memoryPage = new Adw.PreferencesPage({
@@ -236,6 +293,100 @@ export default class AetherPreferences extends ExtensionPreferences {
             settings.set_string('db-path', dbPathRow.get_text());
         });
         dbGroup.add(dbPathRow);
+    }
+
+    // ── Custom Prompt Dialog ──
+
+    _showCustomPromptDialog() {
+        const settings = this._settings;
+        const currentPrompt = settings.get_string('custom-main-prompt') || DEFAULT_SYSTEM_PROMPT;
+
+        const dialog = new Adw.AlertDialog({
+            heading: 'Custom Main Prompt',
+            body: 'Define Aether\'s behavior and personality. This prompt will be used instead of the default.',
+            width_request: 600,
+        });
+
+        const box = new Gtk.Box({
+            orientation: Gtk.Orientation.VERTICAL,
+            spacing: 12,
+            margin_start: 12,
+            margin_end: 12,
+            margin_top: 8,
+            margin_bottom: 8,
+        });
+
+        const infoLabel = new Gtk.Label({
+            label: 'Leave empty to use the default prompt.',
+            halign: Gtk.Align.START,
+            css_classes: ['dim-label'],
+        });
+
+        const promptView = new Gtk.TextView({
+            wrap_mode: Gtk.WrapMode.WORD_CHAR,
+            top_margin: 8,
+        });
+        promptView.buffer.set_text(currentPrompt, -1);
+        const promptScroll = new Gtk.ScrolledWindow({
+            child: promptView,
+            min_content_height: 150,
+            max_content_height: 300,
+        });
+
+        box.append(infoLabel);
+        box.append(promptScroll);
+
+        dialog.set_extra_child(box);
+        dialog.add_response('cancel', 'Cancel');
+        dialog.add_response('save', 'Save');
+        dialog.set_default_response('save');
+        dialog.set_response_appearance('save', Adw.ResponseAppearance.SUGGESTED);
+
+        dialog.connect('response', (_dlg, response) => {
+            if (response === 'save') {
+                const startIter = promptView.buffer.get_start_iter();
+                const endIter = promptView.buffer.get_end_iter();
+                const promptText = promptView.buffer.get_text(startIter, endIter, false).trim();
+
+                // If empty, clear custom prompt (reverts to default)
+                if (promptText === '' || promptText === DEFAULT_SYSTEM_PROMPT) {
+                    settings.set_string('custom-main-prompt', '');
+                } else {
+                    settings.set_string('custom-main-prompt', promptText);
+                }
+
+                // Refresh the settings dialog to update status label
+                this._updateCustomPromptStatus();
+            }
+        });
+
+        dialog.present(this._window);
+    }
+
+    _resetCustomPrompt() {
+        const dialog = new Adw.MessageDialog({
+            heading: 'Reset Main Prompt',
+            body: 'Are you sure you want to reset to the default system prompt? Your custom prompt will be cleared.',
+        });
+
+        dialog.add_response('cancel', 'Cancel');
+        dialog.add_response('reset', 'Reset');
+        dialog.set_response_appearance('reset', Adw.ResponseAppearance.DESTRUCTIVE);
+
+        dialog.connect('response', (_dlg, response) => {
+            if (response === 'reset') {
+                this._settings.set_string('custom-main-prompt', '');
+                this._updateCustomPromptStatus();
+            }
+        });
+
+        dialog.present(this._window);
+    }
+
+    _updateCustomPromptStatus() {
+        // Rebuild the preferences window to refresh status labels
+        // This is a simple approach - could be optimized with proper widget references
+        this.fillPreferencesWindow(this._window);
     }
 
     // ── Provider List Management ──

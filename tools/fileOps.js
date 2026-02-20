@@ -4,12 +4,14 @@ import Gio from 'gi://Gio';
 export class ReadFileTool {
     constructor() {
         this.name = 'read_file';
-        this.description = 'Read the contents of a file at the given path.';
+        this.description = 'Read the contents of a file. Supports reading specific line ranges with offset and max_lines for efficient partial reads of large files.';
         this.parameters = {
             type: 'object',
             properties: {
                 path: {type: 'string', description: 'Absolute path to the file'},
+                offset: {type: 'integer', description: 'Start reading from this line number (0-based, default: 0)'},
                 max_lines: {type: 'integer', description: 'Max lines to read (default: all)'},
+                line_numbers: {type: 'boolean', description: 'Prefix each line with its line number (default: false)'},
             },
             required: ['path'],
         };
@@ -26,15 +28,25 @@ export class ReadFileTool {
                         return;
                     }
                     let text = new TextDecoder().decode(contents);
+                    const allLines = text.split('\n');
+                    const totalLines = allLines.length;
 
-                    if (args.max_lines) {
-                        const lines = text.split('\n');
-                        text = lines.slice(0, args.max_lines).join('\n');
-                        if (lines.length > args.max_lines)
-                            text += `\n... (${lines.length - args.max_lines} more lines)`;
+                    const offset = args.offset || 0;
+                    const maxLines = args.max_lines || totalLines;
+                    const sliced = allLines.slice(offset, offset + maxLines);
+
+                    if (args.line_numbers) {
+                        text = sliced.map((line, i) => `${offset + i + 1}: ${line}`).join('\n');
+                    } else {
+                        text = sliced.join('\n');
                     }
 
-                    // Truncate very large files
+                    // Show context about what was read
+                    const endLine = Math.min(offset + maxLines, totalLines);
+                    if (offset > 0 || endLine < totalLines)
+                        text += `\n--- (showing lines ${offset + 1}-${endLine} of ${totalLines}) ---`;
+
+                    // Truncate very large output
                     if (text.length > 50000)
                         text = text.slice(0, 50000) + '\n... (truncated)';
 
@@ -43,6 +55,80 @@ export class ReadFileTool {
                     resolve(JSON.stringify({error: e.message}));
                 }
             });
+        });
+    }
+}
+
+export class EditFileTool {
+    constructor() {
+        this.name = 'edit_file';
+        this.description = 'Edit a file by finding and replacing specific text. Much more reliable than rewriting entire files. Supports multiple replacements in one call. Use read_file with line_numbers first to see the exact text to replace.';
+        this.parameters = {
+            type: 'object',
+            properties: {
+                path: {type: 'string', description: 'Absolute path to the file'},
+                edits: {
+                    type: 'array',
+                    description: 'Array of {old_string, new_string} replacements to apply in order',
+                    items: {
+                        type: 'object',
+                        properties: {
+                            old_string: {type: 'string', description: 'Exact text to find (must match exactly, including whitespace)'},
+                            new_string: {type: 'string', description: 'Text to replace it with'},
+                        },
+                        required: ['old_string', 'new_string'],
+                    },
+                },
+            },
+            required: ['path', 'edits'],
+        };
+    }
+
+    execute(args) {
+        return new Promise((resolve) => {
+            try {
+                const file = Gio.File.new_for_path(args.path);
+
+                if (!file.query_exists(null)) {
+                    resolve(JSON.stringify({error: `File not found: ${args.path}`}));
+                    return;
+                }
+
+                const [ok, contents] = file.load_contents(null);
+                if (!ok) {
+                    resolve(JSON.stringify({error: `Failed to read ${args.path}`}));
+                    return;
+                }
+
+                let text = new TextDecoder().decode(contents);
+                const results = [];
+
+                for (let i = 0; i < args.edits.length; i++) {
+                    const {old_string, new_string} = args.edits[i];
+                    const idx = text.indexOf(old_string);
+                    if (idx === -1) {
+                        results.push(`Edit ${i + 1}: FAILED — old_string not found`);
+                        continue;
+                    }
+                    // Check for ambiguity — multiple matches
+                    const secondIdx = text.indexOf(old_string, idx + 1);
+                    if (secondIdx !== -1)
+                        results.push(`Edit ${i + 1}: WARNING — multiple matches found, replacing first occurrence`);
+
+                    text = text.slice(0, idx) + new_string + text.slice(idx + old_string.length);
+                    results.push(`Edit ${i + 1}: OK`);
+                }
+
+                const bytes = new TextEncoder().encode(text);
+                file.replace_contents(
+                    bytes, null, false,
+                    Gio.FileCreateFlags.REPLACE_DESTINATION, null
+                );
+
+                resolve(results.join('\n'));
+            } catch (e) {
+                resolve(JSON.stringify({error: e.message}));
+            }
         });
     }
 }

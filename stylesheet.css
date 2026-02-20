@@ -70,10 +70,16 @@
 }
 
 /* ──────────────────────────────────────────────
-   DARK THEME — transparent, no panel background
+   DARK THEME
    ────────────────────────────────────────────── */
 
 .aether-panel-dark {
+  background-color: rgba(28, 28, 30, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+}
+
+/* Message panel is transparent — only individual bubbles have backgrounds */
+.aether-message-panel.aether-panel-dark {
   background-color: transparent;
   border: none;
 }
@@ -83,12 +89,12 @@
   color: rgba(255, 255, 255, 0.60);
 }
 .aether-panel-dark .aether-new-chat-btn {
-  background-color: rgba(255, 255, 255, 0.12);
-  color: rgba(255, 255, 255, 0.65);
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  background-color: transparent;
+  color: rgba(255, 255, 255, 0.60);
+  border: none;
 }
 .aether-panel-dark .aether-new-chat-btn:hover {
-  background-color: rgba(255, 255, 255, 0.20);
+  background-color: rgba(255, 255, 255, 0.10);
   color: rgba(255, 255, 255, 0.90);
 }
 
@@ -128,12 +134,12 @@
 
 /* Dark — bubbles */
 .aether-panel-dark .aether-bubble-user {
-  background-color: rgba(255, 255, 255, 0.12);
-  border: 1px solid rgba(255, 255, 255, 0.18);
+  background-color: rgb(58, 58, 62);
+  border: 1px solid rgba(255, 255, 255, 0.12);
 }
 .aether-panel-dark .aether-bubble-assistant {
-  background-color: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  background-color: rgb(44, 44, 48);
+  border: 1px solid rgba(255, 255, 255, 0.08);
 }
 .aether-panel-dark .aether-bubble-role {
   color: rgba(255, 255, 255, 0.50);
@@ -168,10 +174,16 @@
 }
 
 /* ──────────────────────────────────────────────
-   LIGHT THEME — transparent, no panel background
+   LIGHT THEME
    ────────────────────────────────────────────── */
 
 .aether-panel-light {
+  background-color: rgba(245, 245, 247, 0.94);
+  border: 1px solid rgba(0, 0, 0, 0.10);
+}
+
+/* Message panel is transparent — only individual bubbles have backgrounds */
+.aether-message-panel.aether-panel-light {
   background-color: transparent;
   border: none;
 }
@@ -181,12 +193,12 @@
   color: rgba(50, 50, 50, 0.50);
 }
 .aether-panel-light .aether-new-chat-btn {
-  background-color: rgba(255, 255, 255, 0.45);
-  color: rgba(60, 60, 60, 0.55);
-  border: 1px solid rgba(190, 190, 190, 0.25);
+  background-color: transparent;
+  color: rgba(60, 60, 60, 0.50);
+  border: none;
 }
 .aether-panel-light .aether-new-chat-btn:hover {
-  background-color: rgba(255, 255, 255, 0.70);
+  background-color: rgba(0, 0, 0, 0.06);
   color: rgba(40, 40, 40, 1);
 }
 
@@ -226,11 +238,11 @@
 
 /* Light — bubbles */
 .aether-panel-light .aether-bubble-user {
-  background-color: rgba(255, 255, 255, 0.50);
-  border: 1px solid rgba(200, 200, 200, 0.18);
+  background-color: rgb(255, 255, 255);
+  border: 1px solid rgba(0, 0, 0, 0.06);
 }
 .aether-panel-light .aether-bubble-assistant {
-  background-color: rgba(255, 255, 255, 0.35);
+  background-color: rgb(240, 240, 242);
   border: 1px solid rgba(200, 200, 200, 0.12);
 }
 .aether-panel-light .aether-bubble-role {
@@ -281,9 +293,11 @@
 }
 
 .aether-new-chat-btn {
-  border-radius: 14px;
-  padding: 4px 12px;
-  font-size: 11px;
+  border-radius: 50px;
+  padding: 7px;
+  min-width: 32px;
+  min-height: 32px;
+  margin-right: 4px;
   transition-duration: 150ms;
 }
 
@@ -302,9 +316,12 @@
 
 /* Mic button */
 .aether-mic-button {
-  border-radius: 18px;
+  border-radius: 50px;
   padding: 7px;
-  background-color: transparent;
+  min-width: 32px;
+  min-height: 32px;
+  margin-right: 4px;
+  background-color: rgba(255, 255, 255, 0.10);
   transition-duration: 150ms;
 }
 
@@ -315,8 +332,10 @@
 
 /* Send button */
 .aether-send-button {
-  border-radius: 18px;
+  border-radius: 50px;
   padding: 7px;
+  min-width: 32px;
+  min-height: 32px;
   background-color: transparent;
   transition-duration: 150ms;
 }
@@ -474,36 +493,36 @@
 }
 
 .aether-status-info {
-  background-color: rgba(140, 140, 140, 0.05);
-  border: 1px solid rgba(140, 140, 140, 0.08);
+  background-color: rgb(50, 50, 54);
+  border: 1px solid rgba(255, 255, 255, 0.06);
 }
 .aether-status-info .aether-status-icon {
-  color: rgba(120, 120, 120, 0.55);
+  color: rgba(200, 200, 200, 0.60);
 }
 .aether-status-info .aether-status-text {
-  color: rgba(100, 100, 100, 0.65);
+  color: rgba(200, 200, 200, 0.75);
 }
 
 .aether-status-tool {
-  background-color: rgba(80, 160, 140, 0.04);
-  border: 1px solid rgba(80, 160, 140, 0.08);
+  background-color: rgb(40, 55, 50);
+  border: 1px solid rgba(80, 180, 150, 0.12);
 }
 .aether-status-tool .aether-status-icon {
-  color: rgba(60, 140, 120, 0.55);
+  color: rgba(100, 210, 180, 0.70);
 }
 .aether-status-tool .aether-status-text {
-  color: rgba(50, 120, 105, 0.65);
+  color: rgba(140, 220, 195, 0.85);
 }
 
 .aether-status-error {
-  background-color: rgba(200, 60, 60, 0.04);
-  border: 1px solid rgba(200, 60, 60, 0.08);
+  background-color: rgb(60, 35, 35);
+  border: 1px solid rgba(220, 80, 80, 0.15);
 }
 .aether-status-error .aether-status-icon {
-  color: rgba(180, 50, 50, 0.55);
+  color: rgba(230, 100, 100, 0.75);
 }
 .aether-status-error .aether-status-text {
-  color: rgba(160, 40, 40, 0.65);
+  color: rgba(235, 130, 130, 0.85);
 }
 
 /* ──────────────────────────────────────────────
@@ -511,8 +530,8 @@
    ────────────────────────────────────────────── */
 
 .aether-tool-container {
-  background-color: rgba(140, 140, 140, 0.04);
-  border: 1px solid rgba(140, 140, 140, 0.06);
+  background-color: rgb(36, 36, 40);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 12px;
   padding: 0;
   margin: 2px 0;
@@ -525,23 +544,23 @@
   transition-duration: 150ms;
 }
 .aether-tool-header:hover {
-  background-color: rgba(140, 140, 140, 0.05);
+  background-color: rgba(255, 255, 255, 0.06);
 }
 
 .aether-tool-header-icon {
-  color: rgba(120, 120, 120, 0.45);
+  color: rgba(255, 255, 255, 0.50);
 }
 
 .aether-tool-header-text {
   font-size: 11px;
   font-weight: bold;
-  color: rgba(120, 120, 120, 0.55);
+  color: rgba(255, 255, 255, 0.60);
   letter-spacing: 0.3px;
 }
 
 .aether-tool-chevron {
   font-size: 11px;
-  color: rgba(120, 120, 120, 0.30);
+  color: rgba(255, 255, 255, 0.35);
 }
 
 .aether-tool-body {

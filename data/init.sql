@@ -1,6 +1,6 @@
 CREATE TABLE IF NOT EXISTS memories (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  type TEXT NOT NULL CHECK(type IN ('fact', 'preference', 'procedure', 'note')),
+  type TEXT NOT NULL CHECK(type IN ('fact', 'preference', 'procedure', 'note', 'agent_learning')),
   content TEXT NOT NULL,
   keywords TEXT,
   created_at TEXT DEFAULT (datetime('now')),
