@@ -67,6 +67,7 @@ export default class AetherExtension extends Extension {
             this._settings
         );
         Main.layoutManager.uiGroup.add_child(this._overlay);
+        this._agentManager.setOverlay(this._overlay);
 
         // Register keybinding: hold Ctrl+Space for voice, tap for toggle
         Main.wm.addKeybinding(

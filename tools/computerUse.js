@@ -149,62 +149,46 @@ export class ScreenshotTool {
     }
 
     async execute(args) {
-        const hideOverlay = this._settings.get_boolean('computer-use-hide-overlay');
+        // Note: overlay is hidden for the entire CU agent run by agentManager,
+        // so no per-tool hide/show is needed here.
+        const screenshot = new Shell.Screenshot();
+        const isRegion = (args.x !== undefined && args.y !== undefined &&
+                          args.width !== undefined && args.height !== undefined);
 
-        // Temporarily hide the Aether overlay so the agent sees the real desktop
-        let overlayWasVisible = false;
-        if (hideOverlay && Main.layoutManager._aetherOverlay) {
-            overlayWasVisible = Main.layoutManager._aetherOverlay.visible;
-            if (overlayWasVisible)
-                Main.layoutManager._aetherOverlay.hide();
-            // Wait a frame for the compositor to render without the overlay
-            await delay(50);
+        const monitor = Main.layoutManager.primaryMonitor;
+        const scaleFactor = St.ThemeContext.get_for_stage(global.stage).scale_factor;
+
+        // Capture screenshot to a Gio.MemoryOutputStream (in-memory PNG)
+        const stream = Gio.MemoryOutputStream.new_resizable();
+
+        if (isRegion) {
+            await screenshot.screenshot_area(
+                args.x, args.y, args.width, args.height, stream
+            );
+        } else {
+            await screenshot.screenshot(false, stream);
         }
 
-        try {
-            const screenshot = new Shell.Screenshot();
-            const isRegion = (args.x !== undefined && args.y !== undefined &&
-                              args.width !== undefined && args.height !== undefined);
+        stream.close(null);
 
-            const monitor = Main.layoutManager.primaryMonitor;
-            const scaleFactor = St.ThemeContext.get_for_stage(global.stage).scale_factor;
+        // Extract bytes and base64 encode
+        const bytes = stream.steal_as_bytes();
+        const base64 = GLib.base64_encode(bytes.get_data());
 
-            // Capture screenshot to a Gio.MemoryOutputStream (in-memory PNG)
-            const stream = Gio.MemoryOutputStream.new_resizable();
+        // Inject the image into the conversation via callback
+        if (this._injectImage)
+            this._injectImage(base64);
 
-            if (isRegion) {
-                await screenshot.screenshot_area(
-                    args.x, args.y, args.width, args.height, stream
-                );
-            } else {
-                await screenshot.screenshot(false, stream);
-            }
-
-            stream.close(null);
-
-            // Extract bytes and base64 encode
-            const bytes = stream.steal_as_bytes();
-            const base64 = GLib.base64_encode(bytes.get_data());
-
-            // Inject the image into the conversation via callback
-            if (this._injectImage)
-                this._injectImage(base64);
-
-            return JSON.stringify({
-                status: 'screenshot_captured',
-                screen_width: monitor.width,
-                screen_height: monitor.height,
-                scale_factor: scaleFactor,
-                region: isRegion
-                    ? {x: args.x, y: args.y, width: args.width, height: args.height}
-                    : 'full_screen',
-                note: 'The screenshot has been injected into the conversation. You can now see it and determine coordinates for mouse/keyboard actions. Coordinates are in logical pixels from (0,0) at top-left to (screen_width, screen_height).',
-            });
-        } finally {
-            // Restore overlay visibility
-            if (overlayWasVisible && Main.layoutManager._aetherOverlay)
-                Main.layoutManager._aetherOverlay.show();
-        }
+        return JSON.stringify({
+            status: 'screenshot_captured',
+            screen_width: monitor.width,
+            screen_height: monitor.height,
+            scale_factor: scaleFactor,
+            region: isRegion
+                ? {x: args.x, y: args.y, width: args.width, height: args.height}
+                : 'full_screen',
+            note: 'The screenshot has been injected into the conversation. You can now see it and determine coordinates for mouse/keyboard actions. Coordinates are in logical pixels from (0,0) at top-left to (screen_width, screen_height).',
+        });
     }
 }
 
@@ -556,33 +540,19 @@ export class ClickAtTextTool {
         }
 
         // 2. Take screenshot and save to temp file
-        const hideOverlay = this._settings.get_boolean('computer-use-hide-overlay');
-        let overlayWasVisible = false;
-        if (hideOverlay && Main.layoutManager._aetherOverlay) {
-            overlayWasVisible = Main.layoutManager._aetherOverlay.visible;
-            if (overlayWasVisible)
-                Main.layoutManager._aetherOverlay.hide();
-            await delay(50);
-        }
+        // Note: overlay is hidden for the entire CU agent run by agentManager
+        const screenshot = new Shell.Screenshot();
+        const stream = Gio.MemoryOutputStream.new_resizable();
+        await screenshot.screenshot(false, stream);
+        stream.close(null);
+        const bytes = stream.steal_as_bytes();
+        const screenshotBase64 = GLib.base64_encode(bytes.get_data());
 
-        let screenshotBase64;
-        try {
-            const screenshot = new Shell.Screenshot();
-            const stream = Gio.MemoryOutputStream.new_resizable();
-            await screenshot.screenshot(false, stream);
-            stream.close(null);
-            const bytes = stream.steal_as_bytes();
-            screenshotBase64 = GLib.base64_encode(bytes.get_data());
-
-            // Also write PNG for tesseract
-            const pngPath = '/tmp/.aether-ocr.png';
-            const pngFile = Gio.File.new_for_path(pngPath);
-            pngFile.replace_contents(bytes.get_data(), null, false,
-                Gio.FileCreateFlags.REPLACE_DESTINATION, null);
-        } finally {
-            if (overlayWasVisible && Main.layoutManager._aetherOverlay)
-                Main.layoutManager._aetherOverlay.show();
-        }
+        // Also write PNG for tesseract
+        const pngPath = '/tmp/.aether-ocr.png';
+        const pngFile = Gio.File.new_for_path(pngPath);
+        pngFile.replace_contents(bytes.get_data(), null, false,
+            Gio.FileCreateFlags.REPLACE_DESTINATION, null);
 
         // Inject screenshot into conversation
         if (this._injectImage)
