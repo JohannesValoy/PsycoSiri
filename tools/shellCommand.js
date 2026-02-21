@@ -197,6 +197,20 @@ export class ShellCommandTool {
     execute(args) {
         const {command, timeout_ms, background, working_directory} = args;
 
+        // Intercept X11 automation tools — they don't work on Wayland.
+        // Redirect the model to use the built-in computer use tools instead.
+        const cmd0 = (command || '').trim().split(/\s+/)[0].replace(/^.*\//, '');
+        const X11_TOOLS = new Set([
+            'xdotool', 'xte', 'xclip', 'xsel', 'xwininfo', 'xprop',
+            'wmctrl', 'xrandr', 'xinput', 'xev',
+        ]);
+        if (X11_TOOLS.has(cmd0)) {
+            return JSON.stringify({
+                error: `"${cmd0}" is an X11 tool and does not work on Wayland.`,
+                hint: 'You are running inside a Wayland GNOME Shell compositor. Use the built-in tools instead: screenshot (see the screen), mouse_click (click at x,y), mouse_move, keyboard_type (type text), keyboard_shortcut (press keys like ctrl+c), scroll, wait.',
+            });
+        }
+
         // Build the actual command, prepending cd if working_directory is set
         const actualCommand = working_directory
             ? `cd ${GLib.shell_quote(working_directory)} && ${command}`

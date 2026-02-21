@@ -360,7 +360,7 @@
 /* Output scroll area */
 .aether-output-scroll {
   padding: 0 14px;
-  overflow-x: auto;
+  overflow-x: hidden;
   overflow-y: auto;
 }
 
@@ -378,19 +378,21 @@
 .aether-bubble {
   border-radius: 18px;
   padding: 12px 16px;
-  max-width: 560px;
-  width: 560px;
+  max-width: calc(100% - 20px);
+  width: auto;
   overflow: hidden;
   margin-bottom: 14px;
 }
 
 .aether-bubble-user {
-  margin-left: 70px;
+  margin-left: auto;
+  margin-right: 10px;
   margin-top: 6px;
 }
 
 .aether-bubble-assistant {
-  margin-right: 50px;
+  margin-left: 10px;
+  margin-right: auto;
   margin-top: 6px;
 }
 
@@ -403,6 +405,8 @@
 
 .aether-bubble-content {
   font-size: 14px;
+  word-break: break-word;
+  overflow-wrap: break-word;
 }
 
 .aether-error-text {
@@ -417,8 +421,9 @@
   border-radius: 10px;
   padding: 10px 12px;
   margin: 4px 0;
-  overflow-x: auto;
+  overflow-x: hidden;
   max-width: 100%;
+  word-break: break-all;
 }
 
 .aether-code-block-header {
@@ -430,6 +435,7 @@
 .aether-code-block-text {
   font-family: monospace;
   font-size: 12px;
+  word-break: break-word;
 }
 
 /* ──────────────────────────────────────────────
@@ -447,6 +453,8 @@
 
 .aether-list-text {
   font-size: 14px;
+  word-break: break-word;
+  overflow-wrap: break-word;
 }
 
 /* ──────────────────────────────────────────────
@@ -456,6 +464,7 @@
 .aether-heading {
   font-weight: bold;
   padding: 4px 0 2px 0;
+  word-break: break-word;
 }
 .aether-heading-1 { font-size: 20px; }
 .aether-heading-2 { font-size: 17px; }
@@ -502,6 +511,8 @@
 .aether-status-text {
   font-size: 11px;
   font-family: monospace;
+  word-break: break-word;
+  overflow-wrap: break-word;
 }
 
 .aether-status-info {
@@ -568,6 +579,7 @@
   font-weight: bold;
   color: rgba(255, 255, 255, 0.60);
   letter-spacing: 0.3px;
+  overflow: hidden;
 }
 
 .aether-tool-chevron {
@@ -577,6 +589,8 @@
 
 .aether-tool-body {
   padding: 2px 8px 8px 8px;
+  max-width: 100%;
+  overflow: hidden;
 }
 
 /* ──────────────────────────────────────────────
@@ -774,6 +788,36 @@
   text-align: center;
 }
 
+/* ── Screenshot viewer in agent popup ── */
+
+.aether-screenshot-container {
+  margin: 1px 0;
+}
+
+.aether-screenshot-row {
+  cursor: pointer;
+}
+
+.aether-screenshot-row:hover {
+  background-color: rgba(80, 160, 220, 0.12) !important;
+}
+
+.aether-screenshot-preview-box {
+  padding: 4px 0;
+}
+
+.aether-screenshot-preview {
+  border-radius: 8px;
+  margin: 4px 0;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+}
+
+.aether-screenshot-info {
+  font-size: 10px;
+  color: rgba(255, 180, 100, 0.75);
+  padding: 2px 0;
+}
+
 /* ──────────────────────────────────────────────
    Tables
    ────────────────────────────────────────────── */
@@ -783,7 +827,8 @@
   border: 1px solid rgba(255, 255, 255, 0.08);
   padding: 0;
   margin: 6px 0;
-  overflow-x: auto;
+  overflow-x: hidden;
+  max-width: 100%;
 }
 
 .aether-table-row {
@@ -800,12 +845,14 @@
 
 .aether-table-cell {
   padding: 8px 12px;
-  min-width: 80px;
+  min-width: 40px;
+  word-break: break-word;
 }
 
 .aether-table-cell-header {
   padding: 10px 12px;
-  min-width: 80px;
+  min-width: 40px;
+  word-break: break-word;
 }
 
 .aether-table-cell-text {

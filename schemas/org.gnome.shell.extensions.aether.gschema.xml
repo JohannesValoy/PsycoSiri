@@ -118,5 +118,48 @@
       <description>JSON object mapping agent IDs to their configuration (name, providerId, modelId, systemPrompt)</description>
     </key>
 
+    <!-- Computer Use -->
+    <key name="computer-use-enabled" type="b">
+      <default>true</default>
+      <summary>Enable computer use tools</summary>
+      <description>Register screenshot, mouse, keyboard, and scroll tools for vision-capable agents</description>
+    </key>
+
+    <key name="computer-use-screenshot-detail" type="s">
+      <default>'low'</default>
+      <summary>Screenshot detail level</summary>
+      <description>Vision API detail level: 'low' (~85 tokens, fast) or 'high' (~765 tokens, detailed). Use 'high' when the agent needs to read small text.</description>
+    </key>
+
+    <key name="computer-use-max-images" type="i">
+      <default>3</default>
+      <summary>Max screenshots in context</summary>
+      <description>Maximum number of screenshot images kept in agent context. Older screenshots are removed to prevent context overflow. (1-10)</description>
+    </key>
+
+    <key name="computer-use-action-delay" type="i">
+      <default>100</default>
+      <summary>Action delay (ms)</summary>
+      <description>Delay in milliseconds between input sub-actions (e.g., mouse move then click). Higher values improve reliability on slower systems. (50-500)</description>
+    </key>
+
+    <key name="computer-use-hide-overlay" type="b">
+      <default>true</default>
+      <summary>Hide overlay during screenshots</summary>
+      <description>Temporarily hide the Aether overlay before taking screenshots so the agent sees the actual desktop</description>
+    </key>
+
+    <key name="computer-use-grid-overlay" type="b">
+      <default>true</default>
+      <summary>Grid overlay on screenshots</summary>
+      <description>Draw a labeled coordinate grid over screenshots to help the AI model estimate pixel positions accurately</description>
+    </key>
+
+    <key name="computer-use-grid-spacing" type="i">
+      <default>100</default>
+      <summary>Grid spacing (px)</summary>
+      <description>Spacing between grid lines in logical pixels (50-200)</description>
+    </key>
+
   </schema>
 </schemalist>

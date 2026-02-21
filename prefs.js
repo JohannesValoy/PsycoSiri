@@ -105,6 +105,185 @@ export default class AetherPreferences extends ExtensionPreferences {
         });
         this._agentListGroup.add(addAgentRow);
 
+        // ── Computer Use Page ──
+        const computerUsePage = new Adw.PreferencesPage({
+            title: 'Computer Use',
+            icon_name: 'input-mouse-symbolic',
+        });
+        window.add(computerUsePage);
+
+        // ── Computer Use Agent Setup ──
+        const cuAgentGroup = new Adw.PreferencesGroup({
+            title: 'Computer Use Agent',
+            description: 'Configure the agent that controls the desktop. Requires a vision-capable model (e.g. claude-sonnet-4, gpt-4o, gemini-2.0-flash).',
+        });
+        computerUsePage.add(cuAgentGroup);
+
+        // Load existing computer-use agent config if it exists
+        const cuAgentConfigs = this._getAgentConfigs();
+        const cuExisting = cuAgentConfigs['computer-use'] || {};
+
+        const cuProviderEntry = new Adw.EntryRow({
+            title: 'Provider ID',
+        });
+        cuProviderEntry.set_text(cuExisting.providerId || '');
+        cuAgentGroup.add(cuProviderEntry);
+
+        const cuModelEntry = new Adw.EntryRow({
+            title: 'Model ID',
+        });
+        cuModelEntry.set_text(cuExisting.modelId || '');
+        cuAgentGroup.add(cuModelEntry);
+
+        // Show configured providers as a hint
+        const providerConfigs = this._getProviders();
+        const providerIds = Object.keys(providerConfigs);
+        if (providerIds.length > 0) {
+            const hintRow = new Adw.ActionRow({
+                title: 'Available providers',
+                subtitle: providerIds.join(', '),
+            });
+            hintRow.add_suffix(new Gtk.Image({icon_name: 'dialog-information-symbolic'}));
+            cuAgentGroup.add(hintRow);
+        }
+
+        // Save button
+        const cuSaveRow = new Adw.ActionRow({
+            title: cuExisting.providerId ? 'Update Agent' : 'Create Agent',
+            subtitle: cuExisting.providerId
+                ? `Currently: ${cuExisting.providerId} / ${cuExisting.modelId}`
+                : 'Save provider and model to create the computer-use agent',
+            activatable: true,
+        });
+        const cuSaveBtn = new Gtk.Button({
+            icon_name: cuExisting.providerId ? 'document-save-symbolic' : 'list-add-symbolic',
+            valign: Gtk.Align.CENTER,
+            css_classes: ['flat', 'circular', 'suggested-action'],
+            tooltip_text: 'Save computer-use agent config',
+        });
+        const cuSaveHandler = () => {
+            const providerId = cuProviderEntry.get_text().trim();
+            const modelId = cuModelEntry.get_text().trim();
+            if (!providerId || !modelId)
+                return;
+            const configs = this._getAgentConfigs();
+            configs['computer-use'] = {
+                name: 'Computer Use',
+                providerId,
+                modelId,
+                systemPrompt: '', // empty = use default agent prompt
+            };
+            this._saveAgentConfigs(configs);
+            // Update the subtitle to confirm save
+            cuSaveRow.set_subtitle(`Saved: ${providerId} / ${modelId}`);
+            cuSaveRow.set_title('Update Agent');
+            cuSaveBtn.set_icon_name('document-save-symbolic');
+            // Also refresh agent list if it's been built
+            if (this._agentRows)
+                this._buildAgentList();
+        };
+        cuSaveBtn.connect('clicked', cuSaveHandler);
+        cuSaveRow.connect('activated', cuSaveHandler);
+        cuSaveRow.add_suffix(cuSaveBtn);
+        cuAgentGroup.add(cuSaveRow);
+
+        // ── General Settings ──
+        const cuGeneralGroup = new Adw.PreferencesGroup({
+            title: 'Tools',
+        });
+        computerUsePage.add(cuGeneralGroup);
+
+        const cuEnabledRow = new Adw.SwitchRow({
+            title: 'Enable Computer Use',
+            subtitle: 'Register screenshot, mouse, keyboard, and scroll tools for agents',
+        });
+        settings.bind('computer-use-enabled', cuEnabledRow, 'active', Gio.SettingsBindFlags.DEFAULT);
+        cuGeneralGroup.add(cuEnabledRow);
+
+        const cuHideOverlayRow = new Adw.SwitchRow({
+            title: 'Hide Overlay During Screenshots',
+            subtitle: 'Temporarily hide Aether\'s overlay so the agent sees the actual desktop',
+        });
+        settings.bind('computer-use-hide-overlay', cuHideOverlayRow, 'active', Gio.SettingsBindFlags.DEFAULT);
+        cuGeneralGroup.add(cuHideOverlayRow);
+
+        const cuScreenshotGroup = new Adw.PreferencesGroup({
+            title: 'Screenshot Settings',
+        });
+        computerUsePage.add(cuScreenshotGroup);
+
+        const cuGridOverlayRow = new Adw.SwitchRow({
+            title: 'Grid Overlay',
+            subtitle: 'Draw a labeled coordinate grid on screenshots to help the AI estimate pixel positions',
+        });
+        settings.bind('computer-use-grid-overlay', cuGridOverlayRow, 'active', Gio.SettingsBindFlags.DEFAULT);
+        cuScreenshotGroup.add(cuGridOverlayRow);
+
+        const cuGridSpacingRow = new Adw.SpinRow({
+            title: 'Grid Spacing (px)',
+            subtitle: 'Distance between grid lines. Labels: A1=(100,100), B2=(200,200), etc.',
+            adjustment: new Gtk.Adjustment({
+                lower: 50, upper: 200,
+                step_increment: 10,
+                value: settings.get_int('computer-use-grid-spacing'),
+            }),
+        });
+        cuGridSpacingRow.connect('changed', () => {
+            settings.set_int('computer-use-grid-spacing', cuGridSpacingRow.get_value());
+        });
+        cuScreenshotGroup.add(cuGridSpacingRow);
+
+        // Screenshot detail level dropdown
+        const detailModel = new Gtk.StringList();
+        detailModel.append('low');
+        detailModel.append('high');
+        const cuDetailRow = new Adw.ComboRow({
+            title: 'Screenshot Detail Level',
+            subtitle: '"low" = ~85 tokens (fast), "high" = ~765 tokens (can read small text)',
+            model: detailModel,
+        });
+        // Set initial selection from settings
+        const currentDetail = settings.get_string('computer-use-screenshot-detail');
+        cuDetailRow.set_selected(currentDetail === 'high' ? 1 : 0);
+        cuDetailRow.connect('notify::selected', () => {
+            const val = cuDetailRow.get_selected() === 1 ? 'high' : 'low';
+            settings.set_string('computer-use-screenshot-detail', val);
+        });
+        cuScreenshotGroup.add(cuDetailRow);
+
+        const cuMaxImagesRow = new Adw.SpinRow({
+            title: 'Max Screenshots in Context',
+            subtitle: 'Older screenshots are removed to prevent context overflow',
+            adjustment: new Gtk.Adjustment({
+                lower: 1, upper: 10,
+                step_increment: 1,
+                value: settings.get_int('computer-use-max-images'),
+            }),
+        });
+        cuMaxImagesRow.connect('changed', () => {
+            settings.set_int('computer-use-max-images', cuMaxImagesRow.get_value());
+        });
+        cuScreenshotGroup.add(cuMaxImagesRow);
+
+        const cuInputGroup = new Adw.PreferencesGroup({
+            title: 'Input Settings',
+        });
+        computerUsePage.add(cuInputGroup);
+
+        const cuDelayRow = new Adw.SpinRow({
+            title: 'Action Delay (ms)',
+            subtitle: 'Delay between input sub-actions (move → click). Higher = more reliable on slower systems.',
+            adjustment: new Gtk.Adjustment({
+                lower: 50, upper: 500,
+                step_increment: 10,
+                value: settings.get_int('computer-use-action-delay'),
+            }),
+        });
+        cuDelayRow.connect('changed', () => {
+            settings.set_int('computer-use-action-delay', cuDelayRow.get_value());
+        });
+        cuInputGroup.add(cuDelayRow);
+
         // ── Voice Page ──
         const voicePage = new Adw.PreferencesPage({
             title: 'Voice',
