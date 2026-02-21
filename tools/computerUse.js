@@ -588,11 +588,44 @@ export class ClickAtTextTool {
         if (this._injectImage)
             this._injectImage(screenshotBase64);
 
-        // 3. Run tesseract OCR
+        // 3. Pre-process image for OCR: convert to grayscale and invert
+        // Dark themes (light text on dark bg) are terrible for tesseract.
+        // Inversion makes all text dark-on-light which tesseract expects.
+        try {
+            const prepProc = Gio.Subprocess.new(
+                ['python3', '-c', `
+import cairo
+surface = cairo.ImageSurface.create_from_png("/tmp/.aether-ocr.png")
+w, h = surface.get_width(), surface.get_height()
+data = bytearray(surface.get_data())
+stride = surface.get_stride()
+# Convert to grayscale and invert (BGRA format)
+for y in range(h):
+    for x in range(w):
+        off = y * stride + x * 4
+        gray = int(0.299 * data[off+2] + 0.587 * data[off+1] + 0.114 * data[off])
+        inv = 255 - gray
+        data[off] = data[off+1] = data[off+2] = inv
+out = cairo.ImageSurface.create_for_data(data, cairo.FORMAT_ARGB32, w, h, stride)
+out.write_to_png("/tmp/.aether-ocr-prep.png")
+`],
+                Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_PIPE
+            );
+            prepProc.communicate(null, null);
+            prepProc.wait(null);
+        } catch (e) {
+            log(`[Aether] OCR preprocess failed (using raw): ${e.message}`);
+        }
+
+        // Use preprocessed image if available, fall back to raw
+        const ocrImage = GLib.file_test('/tmp/.aether-ocr-prep.png', GLib.FileTest.EXISTS)
+            ? '/tmp/.aether-ocr-prep.png' : '/tmp/.aether-ocr.png';
+
+        // 4. Run tesseract OCR (PSM 3 = fully automatic page segmentation)
         let tsvOutput;
         try {
             const proc = Gio.Subprocess.new(
-                ['tesseract', '/tmp/.aether-ocr.png', 'stdout', '--psm', '11', 'tsv'],
+                ['tesseract', ocrImage, 'stdout', '--psm', '3', 'tsv'],
                 Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_PIPE
             );
             const [, stdoutBytes] = proc.communicate(null, null);
@@ -602,7 +635,7 @@ export class ClickAtTextTool {
             return JSON.stringify({error: `Tesseract failed: ${e.message}`});
         }
 
-        // 4. Parse TSV → word bounding boxes
+        // 5. Parse TSV → word bounding boxes
         const lines = tsvOutput.split('\n');
         const words = [];
         for (let i = 1; i < lines.length; i++) {
@@ -630,7 +663,7 @@ export class ClickAtTextTool {
             });
         }
 
-        // 5. Match strategies
+        // 6. Match strategies
         const lower = searchText.toLowerCase();
         let matches = [];
 
@@ -729,7 +762,7 @@ export class ClickAtTextTool {
         const x = Math.round(target.x);
         const y = Math.round(target.y);
 
-        // 6. Click at the matched position
+        // 7. Click at the matched position
         const pointer = getVirtualPointer();
         const buttonMap = {left: 1, right: 3, middle: 2};
         const btn = buttonMap[args.button || 'left'] || 1;

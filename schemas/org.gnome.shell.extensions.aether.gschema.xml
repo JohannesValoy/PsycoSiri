@@ -156,9 +156,9 @@
     </key>
 
     <key name="computer-use-grid-spacing" type="i">
-      <default>100</default>
+      <default>200</default>
       <summary>Grid spacing (px)</summary>
-      <description>Spacing between grid lines in logical pixels (50-200)</description>
+      <description>Spacing between grid lines in logical pixels (100-500)</description>
     </key>
 
   </schema>
