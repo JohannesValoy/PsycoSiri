@@ -212,6 +212,13 @@ export class ShellCommandTool {
         }
 
         // Build the actual command, prepending cd if working_directory is set
+        // Validate directory exists to give a clear error instead of a cryptic bash failure
+        if (working_directory && !GLib.file_test(working_directory, GLib.FileTest.IS_DIR)) {
+            return JSON.stringify({
+                error: `Working directory does not exist: ${working_directory}`,
+                hint: 'Omit working_directory to use the default home directory, or specify a valid path.',
+            });
+        }
         const actualCommand = working_directory
             ? `cd ${GLib.shell_quote(working_directory)} && ${command}`
             : command;
