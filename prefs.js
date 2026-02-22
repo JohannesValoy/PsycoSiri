@@ -77,6 +77,27 @@ export default class AetherPreferences extends ExtensionPreferences {
         });
         modelGroup.add(contextTokensRow);
 
+        // Backup model selection
+        const backupGroup = new Adw.PreferencesGroup({
+            title: 'Backup Model',
+            description: 'Fallback provider/model used when the active one fails after retries. Leave empty to disable.',
+        });
+        providersPage.add(backupGroup);
+
+        const backupProviderRow = new Adw.EntryRow({title: 'Backup Provider ID'});
+        backupProviderRow.set_text(settings.get_string('backup-provider'));
+        backupProviderRow.connect('changed', () => {
+            settings.set_string('backup-provider', backupProviderRow.get_text());
+        });
+        backupGroup.add(backupProviderRow);
+
+        const backupModelRow = new Adw.EntryRow({title: 'Backup Model'});
+        backupModelRow.set_text(settings.get_string('backup-model'));
+        backupModelRow.connect('changed', () => {
+            settings.set_string('backup-model', backupModelRow.get_text());
+        });
+        backupGroup.add(backupModelRow);
+
         // ── Agents Page ──
         const agentsPage = new Adw.PreferencesPage({
             title: 'Agents',
@@ -135,6 +156,18 @@ export default class AetherPreferences extends ExtensionPreferences {
         cuModelEntry.set_text(cuExisting.modelId || '');
         cuAgentGroup.add(cuModelEntry);
 
+        const cuBackupProviderEntry = new Adw.EntryRow({
+            title: 'Backup Provider ID',
+        });
+        cuBackupProviderEntry.set_text(cuExisting.backupProviderId || '');
+        cuAgentGroup.add(cuBackupProviderEntry);
+
+        const cuBackupModelEntry = new Adw.EntryRow({
+            title: 'Backup Model ID',
+        });
+        cuBackupModelEntry.set_text(cuExisting.backupModelId || '');
+        cuAgentGroup.add(cuBackupModelEntry);
+
         // Show configured providers as a hint
         const providerConfigs = this._getProviders();
         const providerIds = Object.keys(providerConfigs);
@@ -167,11 +200,14 @@ export default class AetherPreferences extends ExtensionPreferences {
             if (!providerId || !modelId)
                 return;
             const configs = this._getAgentConfigs();
+            const backupProv = cuBackupProviderEntry.get_text().trim();
+            const backupMod = cuBackupModelEntry.get_text().trim();
             configs['computer-use'] = {
                 name: 'Computer Use',
                 providerId,
                 modelId,
                 systemPrompt: '', // empty = use default agent prompt
+                ...(backupProv && backupMod ? {backupProviderId: backupProv, backupModelId: backupMod} : {}),
             };
             this._saveAgentConfigs(configs);
             // Update the subtitle to confirm save
@@ -313,6 +349,18 @@ export default class AetherPreferences extends ExtensionPreferences {
         repairModelEntry.set_text(repairExisting.modelId || '');
         repairAgentGroup.add(repairModelEntry);
 
+        const repairBackupProviderEntry = new Adw.EntryRow({
+            title: 'Backup Provider ID',
+        });
+        repairBackupProviderEntry.set_text(repairExisting.backupProviderId || '');
+        repairAgentGroup.add(repairBackupProviderEntry);
+
+        const repairBackupModelEntry = new Adw.EntryRow({
+            title: 'Backup Model ID',
+        });
+        repairBackupModelEntry.set_text(repairExisting.backupModelId || '');
+        repairAgentGroup.add(repairBackupModelEntry);
+
         // Show configured providers as a hint
         const repairProviderConfigs = this._getProviders();
         const repairProviderIds = Object.keys(repairProviderConfigs);
@@ -353,11 +401,14 @@ export default class AetherPreferences extends ExtensionPreferences {
             if (!providerId || !modelId)
                 return;
             const configs = this._getAgentConfigs();
+            const rBackupProv = repairBackupProviderEntry.get_text().trim();
+            const rBackupMod = repairBackupModelEntry.get_text().trim();
             configs['auto-repair'] = {
                 name: 'Auto-Repair',
                 providerId,
                 modelId,
                 systemPrompt: '',
+                ...(rBackupProv && rBackupMod ? {backupProviderId: rBackupProv, backupModelId: rBackupMod} : {}),
             };
             this._saveAgentConfigs(configs);
             repairSaveRow.set_subtitle(`Saved: ${providerId} / ${modelId}`);
@@ -848,9 +899,12 @@ export default class AetherPreferences extends ExtensionPreferences {
             if (DEDICATED_AGENTS.includes(id))
                 continue;
 
+            const backupInfo = cfg.backupProviderId
+                ? `  |  Backup: ${cfg.backupProviderId}/${cfg.backupModelId}`
+                : '';
             const row = new Adw.ActionRow({
                 title: cfg.name || id,
-                subtitle: `Provider: ${cfg.providerId}  |  Model: ${cfg.modelId}`,
+                subtitle: `Provider: ${cfg.providerId}  |  Model: ${cfg.modelId}${backupInfo}`,
             });
 
             // Edit button
@@ -914,6 +968,8 @@ export default class AetherPreferences extends ExtensionPreferences {
         const nameEntry = new Gtk.Entry({placeholder_text: 'Display name (e.g., Researcher)'});
         const providerEntry = new Gtk.Entry({placeholder_text: 'Provider ID (must match an existing provider)'});
         const modelEntry = new Gtk.Entry({placeholder_text: 'Model ID (e.g., anthropic/claude-sonnet-4)'});
+        const backupProviderEntry = new Gtk.Entry({placeholder_text: 'Backup Provider ID (optional)'});
+        const backupModelEntry = new Gtk.Entry({placeholder_text: 'Backup Model ID (optional)'});
 
         const promptLabel = new Gtk.Label({
             label: 'System Prompt:',
@@ -936,6 +992,8 @@ export default class AetherPreferences extends ExtensionPreferences {
         box.append(nameEntry);
         box.append(providerEntry);
         box.append(modelEntry);
+        box.append(backupProviderEntry);
+        box.append(backupModelEntry);
         box.append(promptLabel);
         box.append(promptScroll);
 
@@ -956,7 +1014,12 @@ export default class AetherPreferences extends ExtensionPreferences {
 
                 if (id && providerId && modelId) {
                     const configs = this._getAgentConfigs();
-                    configs[id] = {name: name || id, providerId, modelId, systemPrompt};
+                    const bProv = backupProviderEntry.get_text().trim();
+                    const bMod = backupModelEntry.get_text().trim();
+                    configs[id] = {
+                        name: name || id, providerId, modelId, systemPrompt,
+                        ...(bProv && bMod ? {backupProviderId: bProv, backupModelId: bMod} : {}),
+                    };
                     this._saveAgentConfigs(configs);
                     this._buildAgentList();
                 }
@@ -993,6 +1056,14 @@ export default class AetherPreferences extends ExtensionPreferences {
             placeholder_text: 'Model ID',
             text: cfg.modelId || '',
         });
+        const backupProviderEntry = new Gtk.Entry({
+            placeholder_text: 'Backup Provider ID (optional)',
+            text: cfg.backupProviderId || '',
+        });
+        const backupModelEntry = new Gtk.Entry({
+            placeholder_text: 'Backup Model ID (optional)',
+            text: cfg.backupModelId || '',
+        });
 
         const promptLabel = new Gtk.Label({
             label: 'System Prompt:',
@@ -1011,6 +1082,8 @@ export default class AetherPreferences extends ExtensionPreferences {
         box.append(nameEntry);
         box.append(providerEntry);
         box.append(modelEntry);
+        box.append(backupProviderEntry);
+        box.append(backupModelEntry);
         box.append(promptLabel);
         box.append(promptScroll);
 
@@ -1030,7 +1103,12 @@ export default class AetherPreferences extends ExtensionPreferences {
 
                 if (providerId && modelId) {
                     const configs = this._getAgentConfigs();
-                    configs[id] = {name: name || id, providerId, modelId, systemPrompt};
+                    const bProv = backupProviderEntry.get_text().trim();
+                    const bMod = backupModelEntry.get_text().trim();
+                    configs[id] = {
+                        name: name || id, providerId, modelId, systemPrompt,
+                        ...(bProv && bMod ? {backupProviderId: bProv, backupModelId: bMod} : {}),
+                    };
                     this._saveAgentConfigs(configs);
                     this._buildAgentList();
                 }

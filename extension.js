@@ -39,7 +39,10 @@ export default class AetherExtension extends Extension {
 
         this._toolRegistry = new ToolRegistry();
         this._agentManager = new AgentManager(this._settings, this._toolRegistry, this._memory, this.path);
-        this._toolRegistry.registerBuiltins(this._memory, this._todoManager, this._settings, this._agentManager);
+        this._agentManager.loadPastRuns().catch(e =>
+            console.error(`[Aether] Load past runs: ${e.message}`));
+        this._toolRegistry.registerBuiltins(this._memory, this._todoManager, this._settings, this._agentManager,
+            () => this._conversation?.sessionId || null);
         this._toolRegistry.loadCustomTools();
 
         this._summarizer = new ContextSummarizer(

@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS conversations (
   role TEXT NOT NULL,
   content TEXT NOT NULL,
   tool_calls TEXT,
+  tool_call_id TEXT,
   token_estimate INTEGER,
   created_at TEXT DEFAULT (datetime('now'))
 );
@@ -45,7 +46,21 @@ CREATE TABLE IF NOT EXISTS saved_tasks (
   created_at TEXT DEFAULT (datetime('now'))
 );
 
+CREATE TABLE IF NOT EXISTS agent_runs (
+  id TEXT PRIMARY KEY,
+  agent_config_id TEXT NOT NULL,
+  task TEXT NOT NULL,
+  state TEXT DEFAULT 'running' CHECK(state IN ('running', 'completed', 'error', 'cancelled')),
+  result TEXT,
+  error TEXT,
+  session_id TEXT,
+  started_at TEXT DEFAULT (datetime('now')),
+  completed_at TEXT
+);
+
 CREATE INDEX IF NOT EXISTS idx_memories_keywords ON memories(keywords);
 CREATE INDEX IF NOT EXISTS idx_conversations_session ON conversations(session_id);
 CREATE INDEX IF NOT EXISTS idx_todos_status ON todos(status);
 CREATE INDEX IF NOT EXISTS idx_saved_tasks_status ON saved_tasks(status);
+CREATE INDEX IF NOT EXISTS idx_agent_runs_session ON agent_runs(session_id);
+CREATE INDEX IF NOT EXISTS idx_agent_runs_state ON agent_runs(state);

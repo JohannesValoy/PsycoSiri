@@ -521,12 +521,13 @@ export class WaitTool {
 export class ClickAtTextTool {
     constructor(settings) {
         this.name = 'click_at_text';
-        this.description = 'Find visible text on screen via OCR and click its center. MUCH more reliable than guessing coordinates from screenshots. Use this for buttons, links, labels, menu items, and any readable text on screen. Takes a screenshot automatically.';
+        this.description = 'Find visible text on screen via OCR and click its center. More reliable than guessing coordinates for text elements. If multiple matches are found, provide near_x/near_y approximate coordinates to click the one closest to that position. Without near_x/near_y, returns an error listing all matches with their coordinates.';
         this.parameters = {
             type: 'object',
             properties: {
                 text: {type: 'string', description: 'The text to find and click (case-insensitive). Can be a single word or short phrase.'},
-                occurrence: {type: 'number', description: 'Which occurrence to click if text appears multiple times (1 = first, default: 1)'},
+                near_x: {type: 'number', description: 'Approximate X coordinate to disambiguate when multiple matches exist. The match closest to (near_x, near_y) will be clicked.'},
+                near_y: {type: 'number', description: 'Approximate Y coordinate to disambiguate when multiple matches exist. The match closest to (near_x, near_y) will be clicked.'},
                 button: {type: 'string', enum: ['left', 'right', 'middle'], description: 'Mouse button (default: left)'},
                 double_click: {description: 'Double-click instead of single (default: false). Pass true or false.'},
             },
@@ -542,7 +543,7 @@ export class ClickAtTextTool {
         if (!searchText)
             return JSON.stringify({error: 'No text provided. Specify the text to find and click.'});
 
-        const occurrence = Math.max(1, args.occurrence || 1);
+        const hasNearCoords = args.near_x !== undefined && args.near_y !== undefined;
 
         // 1. Check tesseract is installed
         try {
@@ -781,15 +782,42 @@ out.write_to_png("/tmp/.aether-ocr-prep.png")
             });
         }
 
-        // Pick the requested occurrence
-        if (occurrence > matches.length) {
+        // Disambiguate multiple matches
+        let target;
+        if (matches.length === 1) {
+            target = matches[0];
+        } else if (hasNearCoords) {
+            // Pick the match closest to the approximate coordinates
+            const nearX = parseFloat(args.near_x);
+            const nearY = parseFloat(args.near_y);
+            let bestDist = Infinity;
+            let bestIdx = 0;
+            for (let i = 0; i < matches.length; i++) {
+                const mx = matches[i].x * coordScaleX;
+                const my = matches[i].y * coordScaleY;
+                const dist = Math.hypot(mx - nearX, my - nearY);
+                if (dist < bestDist) {
+                    bestDist = dist;
+                    bestIdx = i;
+                    target = matches[i];
+                }
+            }
+            target._nearDist = Math.round(bestDist);
+            target._selectedIndex = bestIdx + 1;
+        } else {
+            // Multiple matches, no approximate coordinates — return error with locations
+            const matchList = matches.map((m, i) => ({
+                index: i + 1,
+                x: Math.round(m.x * coordScaleX),
+                y: Math.round(m.y * coordScaleY),
+                matched_text: m.matchedText,
+            }));
             return JSON.stringify({
-                error: `Only ${matches.length} occurrence(s) of "${searchText}" found, but occurrence ${occurrence} was requested.`,
-                total_matches: matches.length,
+                error: `Multiple matches found for "${searchText}" (${matches.length} occurrences). Provide near_x and near_y to click the one closest to your intended target.`,
+                matches: matchList,
+                suggestion: `Call click_at_text with near_x and near_y set to the approximate position of the one you want, e.g.: {"text": "${searchText}", "near_x": ${matchList[0].x}, "near_y": ${matchList[0].y}}. Or use mouse_click with exact coordinates.`,
             });
         }
-
-        const target = matches[occurrence - 1];
         // Scale from physical screenshot pixels to logical pointer pixels
         const x = Math.round(target.x * coordScaleX);
         const y = Math.round(target.y * coordScaleY);
@@ -820,7 +848,7 @@ out.write_to_png("/tmp/.aether-ocr-prep.png")
             pointer.notify_button(timeUs, btn, Clutter.ButtonState.RELEASED);
         }
 
-        return JSON.stringify({
+        const result = {
             status: 'clicked',
             x,
             y,
@@ -830,7 +858,10 @@ out.write_to_png("/tmp/.aether-ocr-prep.png")
             total_matches: matches.length,
             button: args.button || 'left',
             double_click: dblClick,
-        });
+        };
+        if (target._selectedIndex)
+            result.selected = `Match ${target._selectedIndex} of ${matches.length} (${target._nearDist}px from near_x/near_y)`;
+        return JSON.stringify(result);
     }
 }
 

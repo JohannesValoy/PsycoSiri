@@ -27,6 +27,18 @@
       <summary>Active model identifier</summary>
     </key>
 
+    <key name="backup-provider" type="s">
+      <default>''</default>
+      <summary>Backup provider ID</summary>
+      <description>Provider to fall back to when the active provider fails after retries. Leave empty to disable.</description>
+    </key>
+
+    <key name="backup-model" type="s">
+      <default>''</default>
+      <summary>Backup model identifier</summary>
+      <description>Model to use with the backup provider.</description>
+    </key>
+
     <!-- Context / Summarization -->
     <key name="auto-summarize" type="b">
       <default>true</default>
