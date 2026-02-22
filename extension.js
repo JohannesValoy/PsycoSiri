@@ -30,8 +30,11 @@ export default class AetherExtension extends Extension {
 
         // Initialize subsystems
         this._memory = new MemoryManager(dbPath, this.path);
-        this._memory.init().catch(e =>
-            console.error(`[Aether] Memory init error: ${e.message}`));
+        // Chain loadPastRuns after memory init so migrations complete first
+        this._memory.init().then(() => {
+            return this._agentManager?.loadPastRuns();
+        }).catch(e =>
+            console.error(`[Aether] Memory init / load past runs: ${e.message}`));
 
         this._todoManager = new TodoManager(this._memory);
 
@@ -39,8 +42,6 @@ export default class AetherExtension extends Extension {
 
         this._toolRegistry = new ToolRegistry();
         this._agentManager = new AgentManager(this._settings, this._toolRegistry, this._memory, this.path);
-        this._agentManager.loadPastRuns().catch(e =>
-            console.error(`[Aether] Load past runs: ${e.message}`));
         this._toolRegistry.registerBuiltins(this._memory, this._todoManager, this._settings, this._agentManager,
             () => this._conversation?.sessionId || null);
         this._toolRegistry.loadCustomTools();
