@@ -9,9 +9,9 @@ export class ReadFileTool {
             type: 'object',
             properties: {
                 path: {type: 'string', description: 'Absolute path to the file'},
-                offset: {type: 'integer', description: 'Start reading from this line number (0-based, default: 0)'},
-                max_lines: {type: 'integer', description: 'Max lines to read (default: all)'},
-                line_numbers: {type: 'boolean', description: 'Prefix each line with its line number (default: false)'},
+                offset: {type: 'number', description: 'Start reading from this line number (0-based, default: 0)'},
+                max_lines: {type: 'number', description: 'Max lines to read (default: all)'},
+                line_numbers: {description: 'Prefix each line with its line number (default: false). Pass true or false.'},
             },
             required: ['path'],
         };
@@ -35,7 +35,7 @@ export class ReadFileTool {
                     const maxLines = args.max_lines || totalLines;
                     const sliced = allLines.slice(offset, offset + maxLines);
 
-                    if (args.line_numbers) {
+                    if (args.line_numbers === true || args.line_numbers === 'true') {
                         text = sliced.map((line, i) => `${offset + i + 1}: ${line}`).join('\n');
                     } else {
                         text = sliced.join('\n');
@@ -142,7 +142,7 @@ export class WriteFileTool {
             properties: {
                 path: {type: 'string', description: 'Absolute path to the file'},
                 content: {type: 'string', description: 'Content to write'},
-                append: {type: 'boolean', description: 'Append instead of overwrite (default: false)'},
+                append: {description: 'Append instead of overwrite (default: false). Pass true or false.'},
             },
             required: ['path', 'content'],
         };
@@ -158,7 +158,7 @@ export class WriteFileTool {
                 if (parent && !parent.query_exists(null))
                     parent.make_directory_with_parents(null);
 
-                if (args.append) {
+                if (args.append === true || args.append === 'true') {
                     const stream = file.append_to(Gio.FileCreateFlags.NONE, null);
                     const bytes = new TextEncoder().encode(args.content);
                     stream.write_all(bytes, null);
@@ -186,7 +186,7 @@ export class ListDirectoryTool {
             type: 'object',
             properties: {
                 path: {type: 'string', description: 'Absolute path to the directory'},
-                show_hidden: {type: 'boolean', description: 'Include hidden files (default: false)'},
+                show_hidden: {description: 'Include hidden files (default: false). Pass true or false.'},
             },
             required: ['path'],
         };
@@ -205,7 +205,7 @@ export class ListDirectoryTool {
                 let info;
                 while ((info = enumerator.next_file(null)) !== null) {
                     const name = info.get_name();
-                    if (!args.show_hidden && name.startsWith('.'))
+                    if (!(args.show_hidden === true || args.show_hidden === 'true') && name.startsWith('.'))
                         continue;
 
                     const type = info.get_file_type();

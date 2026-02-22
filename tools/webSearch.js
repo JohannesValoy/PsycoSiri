@@ -12,7 +12,7 @@ export class WebSearchTool {
             type: 'object',
             properties: {
                 query: {type: 'string', description: 'The search query'},
-                max_results: {type: 'integer', description: 'Max results to return (overrides settings default)'},
+                max_results: {type: 'number', description: 'Max results to return (overrides settings default)'},
             },
             required: ['query'],
         };

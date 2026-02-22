@@ -20,7 +20,10 @@ import {generateSessionId, getDefaultDbPath} from './lib/utils.js';
 export default class AetherExtension extends Extension {
     enable() {
         this._settings = this.getSettings();
-        this._sessionId = generateSessionId();
+
+        // Restore previous session if available (e.g. after screen lock)
+        const savedSessionId = this._settings.get_string('last-session-id');
+        this._sessionId = savedSessionId || generateSessionId();
 
         // Database path
         const dbPath = this._settings.get_string('db-path') || getDefaultDbPath();
@@ -64,10 +67,21 @@ export default class AetherExtension extends Extension {
             this._stt,
             this._tts,
             this._todoManager,
-            this._settings
+            this._settings,
+            this._memory
         );
         Main.layoutManager.uiGroup.add_child(this._overlay);
         this._agentManager.setOverlay(this._overlay);
+
+        // Restore previous session messages if resuming (e.g. after screen lock)
+        if (savedSessionId) {
+            this._conversation.restoreSession(savedSessionId)
+                .then(() => {
+                    if (this._overlay && this._conversation.messages.length > 0)
+                        this._overlay.loadSessionMessages(this._conversation.messages);
+                })
+                .catch(e => console.error(`[Aether] Session restore: ${e.message}`));
+        }
 
         // Register keybinding: hold Ctrl+Space for voice, tap for toggle
         Main.wm.addKeybinding(
@@ -94,6 +108,15 @@ export default class AetherExtension extends Extension {
     }
 
     disable() {
+        // Save current session ID for restoration after screen lock
+        if (this._conversation && this._settings) {
+            try {
+                this._settings.set_string('last-session-id', this._conversation.sessionId);
+            } catch {
+                // Non-fatal
+            }
+        }
+
         // Remove keybinding
         Main.wm.removeKeybinding('toggle-overlay');
 

@@ -178,12 +178,11 @@ export class ShellCommandTool {
                     description: 'The bash command to execute',
                 },
                 timeout_ms: {
-                    type: 'integer',
+                    type: 'number',
                     description: 'Timeout in milliseconds (default 300000 = 5 min)',
                 },
                 background: {
-                    type: 'boolean',
-                    description: 'Run in background and return immediately with a process ID (default: false)',
+                    description: 'Run in background and return immediately with a process ID (default: false). Pass true or false.',
                 },
                 working_directory: {
                     type: 'string',
@@ -195,7 +194,8 @@ export class ShellCommandTool {
     }
 
     execute(args) {
-        const {command, timeout_ms, background, working_directory} = args;
+        const {command, timeout_ms, working_directory} = args;
+        const background = args.background === true || args.background === 'true';
 
         // Intercept X11 automation tools — they don't work on Wayland.
         // Redirect the model to use the built-in computer use tools instead.
@@ -372,8 +372,7 @@ export class CheckCommandTool {
                     description: 'The process ID returned by run_command',
                 },
                 kill: {
-                    type: 'boolean',
-                    description: 'Kill the process if still running (default: false)',
+                    description: 'Kill the process if still running (default: false). Pass true or false.',
                 },
             },
             required: ['process_id'],
@@ -385,7 +384,8 @@ export class CheckCommandTool {
         if (!entry)
             return JSON.stringify({error: `No background process found with ID "${args.process_id}"`});
 
-        if (args.kill && entry.state === 'running') {
+        const kill = args.kill === true || args.kill === 'true';
+        if (kill && entry.state === 'running') {
             entry.proc.force_exit();
             entry.state = 'killed';
             entry.completedAt = new Date().toISOString();

@@ -284,6 +284,123 @@ export default class AetherPreferences extends ExtensionPreferences {
         });
         cuInputGroup.add(cuDelayRow);
 
+        // ── Auto-Repair Page ──
+        const repairPage = new Adw.PreferencesPage({
+            title: 'Auto-Repair',
+            icon_name: 'applications-engineering-symbolic',
+        });
+        window.add(repairPage);
+
+        const repairAgentGroup = new Adw.PreferencesGroup({
+            title: 'Repair Agent',
+            description: 'Configure the AI model used to diagnose and fix agent failures. Use a strong model (e.g. claude-sonnet-4, gpt-4o) for best results.',
+        });
+        repairPage.add(repairAgentGroup);
+
+        // Load existing auto-repair agent config
+        const repairConfigs = this._getAgentConfigs();
+        const repairExisting = repairConfigs['auto-repair'] || {};
+
+        const repairProviderEntry = new Adw.EntryRow({
+            title: 'Provider ID',
+        });
+        repairProviderEntry.set_text(repairExisting.providerId || '');
+        repairAgentGroup.add(repairProviderEntry);
+
+        const repairModelEntry = new Adw.EntryRow({
+            title: 'Model ID',
+        });
+        repairModelEntry.set_text(repairExisting.modelId || '');
+        repairAgentGroup.add(repairModelEntry);
+
+        // Show configured providers as a hint
+        const repairProviderConfigs = this._getProviders();
+        const repairProviderIds = Object.keys(repairProviderConfigs);
+        if (repairProviderIds.length > 0) {
+            const repairHintRow = new Adw.ActionRow({
+                title: 'Available providers',
+                subtitle: repairProviderIds.join(', '),
+            });
+            repairHintRow.add_suffix(new Gtk.Image({icon_name: 'dialog-information-symbolic'}));
+            repairAgentGroup.add(repairHintRow);
+        }
+
+        // Fallback info row
+        const fallbackRow = new Adw.ActionRow({
+            title: 'Fallback behavior',
+            subtitle: 'If unconfigured, uses active provider/model. Last resort: same model as failed agent.',
+        });
+        fallbackRow.add_suffix(new Gtk.Image({icon_name: 'dialog-information-symbolic'}));
+        repairAgentGroup.add(fallbackRow);
+
+        // Save button
+        const repairSaveRow = new Adw.ActionRow({
+            title: repairExisting.providerId ? 'Update Repair Agent' : 'Create Repair Agent',
+            subtitle: repairExisting.providerId
+                ? `Currently: ${repairExisting.providerId} / ${repairExisting.modelId}`
+                : 'Save provider and model to create a dedicated repair agent',
+            activatable: true,
+        });
+        const repairSaveBtn = new Gtk.Button({
+            icon_name: repairExisting.providerId ? 'document-save-symbolic' : 'list-add-symbolic',
+            valign: Gtk.Align.CENTER,
+            css_classes: ['flat', 'circular', 'suggested-action'],
+            tooltip_text: 'Save auto-repair agent config',
+        });
+        const repairSaveHandler = () => {
+            const providerId = repairProviderEntry.get_text().trim();
+            const modelId = repairModelEntry.get_text().trim();
+            if (!providerId || !modelId)
+                return;
+            const configs = this._getAgentConfigs();
+            configs['auto-repair'] = {
+                name: 'Auto-Repair',
+                providerId,
+                modelId,
+                systemPrompt: '',
+            };
+            this._saveAgentConfigs(configs);
+            repairSaveRow.set_subtitle(`Saved: ${providerId} / ${modelId}`);
+            repairSaveRow.set_title('Update Repair Agent');
+            repairSaveBtn.set_icon_name('document-save-symbolic');
+            if (this._agentRows)
+                this._buildAgentList();
+        };
+        repairSaveBtn.connect('clicked', repairSaveHandler);
+        repairSaveRow.connect('activated', repairSaveHandler);
+        repairSaveRow.add_suffix(repairSaveBtn);
+        repairAgentGroup.add(repairSaveRow);
+
+        // Clear button — remove dedicated config, revert to fallback
+        const repairClearRow = new Adw.ActionRow({
+            title: 'Clear Dedicated Config',
+            subtitle: 'Remove the auto-repair agent config and revert to fallback behavior',
+            activatable: true,
+        });
+        const repairClearBtn = new Gtk.Button({
+            icon_name: 'edit-clear-symbolic',
+            valign: Gtk.Align.CENTER,
+            css_classes: ['flat', 'circular', 'destructive-action'],
+            tooltip_text: 'Remove auto-repair config',
+        });
+        const repairClearHandler = () => {
+            const configs = this._getAgentConfigs();
+            delete configs['auto-repair'];
+            this._saveAgentConfigs(configs);
+            repairProviderEntry.set_text('');
+            repairModelEntry.set_text('');
+            repairSaveRow.set_subtitle('Save provider and model to create a dedicated repair agent');
+            repairSaveRow.set_title('Create Repair Agent');
+            repairSaveBtn.set_icon_name('list-add-symbolic');
+            repairClearRow.set_subtitle('Config cleared — will use fallback behavior');
+            if (this._agentRows)
+                this._buildAgentList();
+        };
+        repairClearBtn.connect('clicked', repairClearHandler);
+        repairClearRow.connect('activated', repairClearHandler);
+        repairClearRow.add_suffix(repairClearBtn);
+        repairAgentGroup.add(repairClearRow);
+
         // ── Voice Page ──
         const voicePage = new Adw.PreferencesPage({
             title: 'Voice',
@@ -724,7 +841,13 @@ export default class AetherPreferences extends ExtensionPreferences {
 
         const configs = this._getAgentConfigs();
 
+        // Filter out agents that have their own dedicated settings pages
+        const DEDICATED_AGENTS = ['computer-use', 'auto-repair'];
+
         for (const [id, cfg] of Object.entries(configs)) {
+            if (DEDICATED_AGENTS.includes(id))
+                continue;
+
             const row = new Adw.ActionRow({
                 title: cfg.name || id,
                 subtitle: `Provider: ${cfg.providerId}  |  Model: ${cfg.modelId}`,
@@ -761,7 +884,8 @@ export default class AetherPreferences extends ExtensionPreferences {
             this._agentRows.push(row);
         }
 
-        if (Object.keys(configs).length === 0) {
+        const userAgentCount = Object.keys(configs).filter(id => !DEDICATED_AGENTS.includes(id)).length;
+        if (userAgentCount === 0) {
             const emptyRow = new Adw.ActionRow({
                 title: 'No agents configured',
                 subtitle: 'Click "Add Agent" below to create one',

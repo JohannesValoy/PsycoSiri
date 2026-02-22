@@ -156,9 +156,22 @@
     </key>
 
     <key name="computer-use-grid-spacing" type="i">
-      <default>200</default>
+      <default>100</default>
       <summary>Grid spacing (px)</summary>
-      <description>Spacing between grid lines in logical pixels (100-500)</description>
+      <description>Spacing between grid lines in logical pixels (50-500)</description>
+    </key>
+
+    <key name="computer-use-target-resolution" type="s">
+      <default>'1280x720'</default>
+      <summary>Target resolution for Computer Use</summary>
+      <description>Screen resolution to switch to during Computer Use agent runs. Lower resolution = faster processing and bigger UI elements. Set to 'native' to keep current resolution. Common: '1280x720', '1920x1080'</description>
+    </key>
+
+    <!-- Session persistence -->
+    <key name="last-session-id" type="s">
+      <default>''</default>
+      <summary>Last session ID</summary>
+      <description>Session ID of the most recent conversation, used to restore state after screen lock</description>
     </key>
 
   </schema>

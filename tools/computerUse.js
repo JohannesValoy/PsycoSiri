@@ -3,6 +3,7 @@ import Gio from 'gi://Gio';
 import Clutter from 'gi://Clutter';
 import Shell from 'gi://Shell';
 import St from 'gi://St';
+import GdkPixbuf from 'gi://GdkPixbuf';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
 // Linux evdev keycodes for keyboard simulation
@@ -55,11 +56,27 @@ const KEY_MAP = {
  * Some models (e.g. glm-4.6v) produce garbage like:
  *   {"x":"988</arg_key>\n<arg_key>y</arg_key>\n<arg_value>72"}
  * where y is embedded in x's string value. This extracts both.
+ * Also handles normalized 0-1 range coordinates (some models output these
+ * instead of pixel values) by multiplying by screen dimensions.
  */
 function parseCoords(args) {
-    let x = typeof args.x === 'number' ? args.x : parseInt(args.x, 10);
-    let y = typeof args.y === 'number' ? args.y : parseInt(args.y, 10);
+    let rawX = typeof args.x === 'number' ? args.x : parseFloat(args.x);
+    let rawY = typeof args.y === 'number' ? args.y : parseFloat(args.y);
     let recovered = false;
+    let normalized = false;
+
+    // Detect normalized 0-1 coordinates and convert to pixel values.
+    // If BOTH x and y are in (0, 1] exclusive, the model almost certainly
+    // meant normalized coords (no real UI target is at pixel 0).
+    if (!isNaN(rawX) && !isNaN(rawY) && rawX > 0 && rawX <= 1 && rawY > 0 && rawY <= 1) {
+        const monitor = Main.layoutManager.primaryMonitor;
+        rawX = rawX * monitor.width;
+        rawY = rawY * monitor.height;
+        normalized = true;
+    }
+
+    let x = Math.round(rawX);
+    let y = Math.round(rawY);
 
     // If y is missing/NaN but x is a string, try to extract y from it
     if (isNaN(y) && typeof args.x === 'string') {
@@ -80,7 +97,9 @@ function parseCoords(args) {
 
     const valid = !isNaN(x) && !isNaN(y);
     let warning = null;
-    if (recovered && valid)
+    if (normalized && valid)
+        warning = `Normalized coordinates detected (${args.x}, ${args.y}) — converted to pixels (${x}, ${y}). Use pixel coordinates directly next time: {"x": ${x}, "y": ${y}}`;
+    else if (recovered && valid)
         warning = `BAD SYNTAX: your arguments ${JSON.stringify({x: args.x, y: args.y})} were malformed. Interpreted as x=${x}, y=${y}. Use proper JSON: {"x": ${x}, "y": ${y}}`;
 
     return {x, y, valid, warning};
@@ -137,10 +156,10 @@ export class ScreenshotTool {
         this.parameters = {
             type: 'object',
             properties: {
-                x: {type: 'integer', description: 'X coordinate of region top-left (omit for full screen)'},
-                y: {type: 'integer', description: 'Y coordinate of region top-left (omit for full screen)'},
-                width: {type: 'integer', description: 'Width of region (omit for full screen)'},
-                height: {type: 'integer', description: 'Height of region (omit for full screen)'},
+                x: {type: 'number', description: 'X coordinate of region top-left (omit for full screen)'},
+                y: {type: 'number', description: 'Y coordinate of region top-left (omit for full screen)'},
+                width: {type: 'number', description: 'Width of region (omit for full screen)'},
+                height: {type: 'number', description: 'Height of region (omit for full screen)'},
             },
         };
         this._settings = settings;
@@ -203,10 +222,10 @@ export class MouseClickTool {
         this.parameters = {
             type: 'object',
             properties: {
-                x: {type: 'integer', description: 'X coordinate in logical pixels'},
-                y: {type: 'integer', description: 'Y coordinate in logical pixels'},
+                x: {type: 'number', description: 'X coordinate in logical pixels'},
+                y: {type: 'number', description: 'Y coordinate in logical pixels'},
                 button: {type: 'string', enum: ['left', 'right', 'middle'], description: 'Mouse button (default: left)'},
-                double_click: {type: 'boolean', description: 'Double-click instead of single (default: false)'},
+                double_click: {description: 'Double-click instead of single (default: false). Pass true or false.'},
             },
             required: ['x', 'y'],
         };
@@ -221,6 +240,7 @@ export class MouseClickTool {
         const pointer = getVirtualPointer();
         const buttonMap = {left: 1, right: 3, middle: 2}; // Clutter button codes
         const btn = buttonMap[args.button || 'left'] || 1;
+        const dblClick = args.double_click === true || args.double_click === 'true';
         const actionDelay = this._settings.get_int('computer-use-action-delay');
 
         let timeUs = GLib.get_monotonic_time();
@@ -235,7 +255,7 @@ export class MouseClickTool {
         timeUs = GLib.get_monotonic_time();
         pointer.notify_button(timeUs, btn, Clutter.ButtonState.RELEASED);
 
-        if (args.double_click) {
+        if (dblClick) {
             await delay(Math.max(50, actionDelay / 2));
             timeUs = GLib.get_monotonic_time();
             pointer.notify_button(timeUs, btn, Clutter.ButtonState.PRESSED);
@@ -249,7 +269,7 @@ export class MouseClickTool {
             x,
             y,
             button: args.button || 'left',
-            double_click: args.double_click || false,
+            double_click: dblClick,
         };
         if (warning)
             result.warning = warning;
@@ -268,8 +288,8 @@ export class MouseMoveTool {
         this.parameters = {
             type: 'object',
             properties: {
-                x: {type: 'integer', description: 'X coordinate in logical pixels'},
-                y: {type: 'integer', description: 'Y coordinate in logical pixels'},
+                x: {type: 'number', description: 'X coordinate in logical pixels'},
+                y: {type: 'number', description: 'Y coordinate in logical pixels'},
             },
             required: ['x', 'y'],
         };
@@ -420,9 +440,9 @@ export class ScrollTool {
             type: 'object',
             properties: {
                 direction: {type: 'string', enum: ['up', 'down', 'left', 'right'], description: 'Scroll direction'},
-                amount: {type: 'integer', description: 'Number of scroll steps (default: 3)'},
-                x: {type: 'integer', description: 'X coordinate to scroll at (optional)'},
-                y: {type: 'integer', description: 'Y coordinate to scroll at (optional)'},
+                amount: {type: 'number', description: 'Number of scroll steps (default: 3)'},
+                x: {type: 'number', description: 'X coordinate to scroll at (optional)'},
+                y: {type: 'number', description: 'Y coordinate to scroll at (optional)'},
             },
             required: ['direction'],
         };
@@ -478,7 +498,7 @@ export class WaitTool {
         this.parameters = {
             type: 'object',
             properties: {
-                ms: {type: 'integer', description: 'Duration in milliseconds (50-10000, default: 1000)'},
+                ms: {type: 'number', description: 'Duration in milliseconds (50-10000, default: 1000)'},
             },
         };
     }
@@ -506,9 +526,9 @@ export class ClickAtTextTool {
             type: 'object',
             properties: {
                 text: {type: 'string', description: 'The text to find and click (case-insensitive). Can be a single word or short phrase.'},
-                occurrence: {type: 'integer', description: 'Which occurrence to click if text appears multiple times (1 = first, default: 1)'},
+                occurrence: {type: 'number', description: 'Which occurrence to click if text appears multiple times (1 = first, default: 1)'},
                 button: {type: 'string', enum: ['left', 'right', 'middle'], description: 'Mouse button (default: left)'},
-                double_click: {type: 'boolean', description: 'Double-click instead of single (default: false)'},
+                double_click: {description: 'Double-click instead of single (default: false). Pass true or false.'},
             },
             required: ['text'],
         };
@@ -591,11 +611,34 @@ out.write_to_png("/tmp/.aether-ocr-prep.png")
         const ocrImage = GLib.file_test('/tmp/.aether-ocr-prep.png', GLib.FileTest.EXISTS)
             ? '/tmp/.aether-ocr-prep.png' : '/tmp/.aether-ocr.png';
 
-        // 4. Run tesseract OCR (PSM 3 = fully automatic page segmentation)
+        // 4. Detect installed tesseract languages and use all of them
+        // (e.g. eng+nor for Norwegian ø/å/æ support)
+        let langArgs = [];
+        try {
+            const langProc = Gio.Subprocess.new(
+                ['tesseract', '--list-langs'],
+                Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_PIPE
+            );
+            const [, langStdout, langStderr] = langProc.communicate(null, null);
+            langProc.wait(null);
+            // --list-langs outputs to stderr on most versions
+            const langText = new TextDecoder().decode(
+                (langStderr?.get_data()?.length > 0 ? langStderr : langStdout).get_data()
+            );
+            const langs = langText.split('\n')
+                .map(l => l.trim())
+                .filter(l => l.length > 0 && l.length < 10 && !l.includes('/') && !l.includes('List'));
+            if (langs.length > 0)
+                langArgs = ['-l', langs.join('+')];
+        } catch {
+            // Fall back to default (eng only)
+        }
+
+        // 5. Run tesseract OCR (PSM 3 = fully automatic page segmentation)
         let tsvOutput;
         try {
             const proc = Gio.Subprocess.new(
-                ['tesseract', ocrImage, 'stdout', '--psm', '3', 'tsv'],
+                ['tesseract', ocrImage, 'stdout', '--psm', '3', ...langArgs, 'tsv'],
                 Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_PIPE
             );
             const [, stdoutBytes] = proc.communicate(null, null);
@@ -605,7 +648,7 @@ out.write_to_png("/tmp/.aether-ocr-prep.png")
             return JSON.stringify({error: `Tesseract failed: ${e.message}`});
         }
 
-        // 5. Parse TSV → word bounding boxes
+        // 6. Parse TSV → word bounding boxes
         const lines = tsvOutput.split('\n');
         const words = [];
         for (let i = 1; i < lines.length; i++) {
@@ -624,6 +667,24 @@ out.write_to_png("/tmp/.aether-ocr-prep.png")
                 lineNum: parseInt(cols[4], 10),
                 wordNum: parseInt(cols[5], 10),
             });
+        }
+
+        // Compute coordinate scaling: OCR returns coordinates in screenshot
+        // physical pixels, but the pointer expects logical pixel coordinates.
+        // On HiDPI/scaled displays these differ (e.g. 2944x1840 physical vs
+        // 1920x1080 logical). Scale = logical / physical.
+        const monitor = Main.layoutManager.primaryMonitor;
+        let coordScaleX = 1, coordScaleY = 1;
+        try {
+            const pngPixbuf = GdkPixbuf.Pixbuf.new_from_file(pngPath);
+            const pngW = pngPixbuf.get_width();
+            const pngH = pngPixbuf.get_height();
+            if (pngW > 0 && pngH > 0) {
+                coordScaleX = monitor.width / pngW;
+                coordScaleY = monitor.height / pngH;
+            }
+        } catch (e) {
+            log(`[Aether] Could not read PNG dims for coord scaling: ${e.message}`);
         }
 
         if (words.length === 0) {
@@ -729,8 +790,9 @@ out.write_to_png("/tmp/.aether-ocr-prep.png")
         }
 
         const target = matches[occurrence - 1];
-        const x = Math.round(target.x);
-        const y = Math.round(target.y);
+        // Scale from physical screenshot pixels to logical pointer pixels
+        const x = Math.round(target.x * coordScaleX);
+        const y = Math.round(target.y * coordScaleY);
 
         // 7. Click at the matched position
         const pointer = getVirtualPointer();
@@ -748,7 +810,8 @@ out.write_to_png("/tmp/.aether-ocr-prep.png")
         timeUs = GLib.get_monotonic_time();
         pointer.notify_button(timeUs, btn, Clutter.ButtonState.RELEASED);
 
-        if (args.double_click) {
+        const dblClick = args.double_click === true || args.double_click === 'true';
+        if (dblClick) {
             await delay(Math.max(50, actionDelay / 2));
             timeUs = GLib.get_monotonic_time();
             pointer.notify_button(timeUs, btn, Clutter.ButtonState.PRESSED);
@@ -766,7 +829,7 @@ out.write_to_png("/tmp/.aether-ocr-prep.png")
             confidence: target.conf,
             total_matches: matches.length,
             button: args.button || 'left',
-            double_click: args.double_click || false,
+            double_click: dblClick,
         });
     }
 }
