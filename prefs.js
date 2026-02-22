@@ -26,6 +26,11 @@ export default class AetherPreferences extends ExtensionPreferences {
 
         this._settings = settings;
         this._window = window;
+
+        // Load models registry for all dropdowns
+        const models = this._getModels();
+        const modelSlugs = Object.keys(models);
+
         this._providerRows = [];
         this._buildProviderList();
 
@@ -45,18 +50,33 @@ export default class AetherPreferences extends ExtensionPreferences {
         // Active model selection
         const modelGroup = new Adw.PreferencesGroup({
             title: 'Active Model',
-            description: 'Set the active provider ID and model to use',
+            description: 'Select a registered model or configure manually',
         });
         providersPage.add(modelGroup);
 
-        const activeProviderRow = new Adw.EntryRow({title: 'Active Provider ID'});
+        // Model dropdown from registry
+        const activeChoices = ['(Manual)', ...modelSlugs];
+        const activeModelList = new Gtk.StringList();
+        for (const c of activeChoices)
+            activeModelList.append(c);
+        const activeModelDropdown = new Adw.ComboRow({
+            title: 'Model',
+            subtitle: 'Select from registry or "(Manual)" to enter provider/model below',
+            model: activeModelList,
+        });
+        const currentActiveSlug = settings.get_string('active-model-slug');
+        const activeIdx = activeChoices.indexOf(currentActiveSlug);
+        activeModelDropdown.set_selected(activeIdx >= 0 ? activeIdx : 0);
+        modelGroup.add(activeModelDropdown);
+
+        const activeProviderRow = new Adw.EntryRow({title: 'Provider ID'});
         activeProviderRow.set_text(settings.get_string('active-provider'));
         activeProviderRow.connect('changed', () => {
             settings.set_string('active-provider', activeProviderRow.get_text());
         });
         modelGroup.add(activeProviderRow);
 
-        const activeModelRow = new Adw.EntryRow({title: 'Active Model'});
+        const activeModelRow = new Adw.EntryRow({title: 'Model ID'});
         activeModelRow.set_text(settings.get_string('active-model'));
         activeModelRow.connect('changed', () => {
             settings.set_string('active-model', activeModelRow.get_text());
@@ -77,12 +97,52 @@ export default class AetherPreferences extends ExtensionPreferences {
         });
         modelGroup.add(contextTokensRow);
 
+        // Wire up active model dropdown
+        activeModelDropdown.connect('notify::selected', () => {
+            const sel = activeModelDropdown.get_selected();
+            if (sel === 0) {
+                settings.set_string('active-model-slug', '');
+            } else {
+                const slug = activeChoices[sel];
+                const mc = models[slug];
+                if (mc) {
+                    settings.set_string('active-model-slug', slug);
+                    settings.set_string('active-provider', mc.providerId);
+                    settings.set_string('active-model', mc.modelId);
+                    settings.set_int('max-context-tokens', mc.maxContext || 128000);
+                    activeProviderRow.set_text(mc.providerId);
+                    activeModelRow.set_text(mc.modelId);
+                    contextTokensRow.get_adjustment().set_value(mc.maxContext || 128000);
+                }
+            }
+        });
+
         // Backup model selection
         const backupGroup = new Adw.PreferencesGroup({
             title: 'Backup Model',
-            description: 'Fallback provider/model used when the active one fails after retries. Leave empty to disable.',
+            description: 'Fallback when the active model fails. Select "(None)" to disable.',
         });
         providersPage.add(backupGroup);
+
+        // Backup model dropdown
+        const backupChoices = ['(None)', '(Manual)', ...modelSlugs];
+        const backupModelList = new Gtk.StringList();
+        for (const c of backupChoices)
+            backupModelList.append(c);
+        const backupModelDropdown = new Adw.ComboRow({
+            title: 'Model',
+            subtitle: 'Select from registry, "(Manual)" to enter manually, or "(None)" to disable',
+            model: backupModelList,
+        });
+        const currentBackupSlug = settings.get_string('backup-model-slug');
+        const currentBackupProvider = settings.get_string('backup-provider');
+        let backupIdx = 0; // "(None)"
+        if (currentBackupSlug && backupChoices.indexOf(currentBackupSlug) >= 0)
+            backupIdx = backupChoices.indexOf(currentBackupSlug);
+        else if (currentBackupProvider)
+            backupIdx = 1; // "(Manual)"
+        backupModelDropdown.set_selected(backupIdx);
+        backupGroup.add(backupModelDropdown);
 
         const backupProviderRow = new Adw.EntryRow({title: 'Backup Provider ID'});
         backupProviderRow.set_text(settings.get_string('backup-provider'));
@@ -91,12 +151,62 @@ export default class AetherPreferences extends ExtensionPreferences {
         });
         backupGroup.add(backupProviderRow);
 
-        const backupModelRow = new Adw.EntryRow({title: 'Backup Model'});
+        const backupModelRow = new Adw.EntryRow({title: 'Backup Model ID'});
         backupModelRow.set_text(settings.get_string('backup-model'));
         backupModelRow.connect('changed', () => {
             settings.set_string('backup-model', backupModelRow.get_text());
         });
         backupGroup.add(backupModelRow);
+
+        // Wire up backup dropdown
+        backupModelDropdown.connect('notify::selected', () => {
+            const sel = backupModelDropdown.get_selected();
+            if (sel === 0) { // "(None)"
+                settings.set_string('backup-model-slug', '');
+                settings.set_string('backup-provider', '');
+                settings.set_string('backup-model', '');
+                backupProviderRow.set_text('');
+                backupModelRow.set_text('');
+            } else if (sel === 1) { // "(Manual)"
+                settings.set_string('backup-model-slug', '');
+            } else {
+                const slug = backupChoices[sel];
+                const mc = models[slug];
+                if (mc) {
+                    settings.set_string('backup-model-slug', slug);
+                    settings.set_string('backup-provider', mc.providerId);
+                    settings.set_string('backup-model', mc.modelId);
+                    backupProviderRow.set_text(mc.providerId);
+                    backupModelRow.set_text(mc.modelId);
+                }
+            }
+        });
+
+        // ── Models Page ──
+        const modelsPage = new Adw.PreferencesPage({
+            title: 'Models',
+            icon_name: 'applications-science-symbolic',
+        });
+        window.add(modelsPage);
+
+        this._modelListGroup = new Adw.PreferencesGroup({
+            title: 'Registered Models',
+            description: 'Define models once, then select them everywhere by name',
+        });
+        modelsPage.add(this._modelListGroup);
+
+        this._modelRows = [];
+        this._buildModelList();
+
+        const addModelRow = new Adw.ActionRow({
+            title: 'Add Model',
+            subtitle: 'Register a new model with provider, API ID, and context limit',
+            activatable: true,
+        });
+        addModelRow.add_suffix(new Gtk.Image({icon_name: 'list-add-symbolic'}));
+        addModelRow.connect('activated', () => this._showAddModelDialog());
+        this._modelListGroup.add(addModelRow);
+        this._addModelRow = addModelRow;
 
         // ── Agents Page ──
         const agentsPage = new Adw.PreferencesPage({
@@ -144,6 +254,24 @@ export default class AetherPreferences extends ExtensionPreferences {
         const cuAgentConfigs = this._getAgentConfigs();
         const cuExisting = cuAgentConfigs['computer-use'] || {};
 
+        // Track selected model slugs
+        let cuModelSlug = cuExisting.modelSlug || '';
+        let cuBackupModelSlug = cuExisting.backupModelSlug || '';
+
+        // Main model dropdown
+        const cuModelChoices = ['(Manual)', ...modelSlugs];
+        const cuModelListData = new Gtk.StringList();
+        for (const c of cuModelChoices)
+            cuModelListData.append(c);
+        const cuModelDropdown = new Adw.ComboRow({
+            title: 'Model',
+            subtitle: 'Select from registry or configure manually below',
+            model: cuModelListData,
+        });
+        const cuModelIdx = cuModelSlug ? cuModelChoices.indexOf(cuModelSlug) : 0;
+        cuModelDropdown.set_selected(cuModelIdx >= 0 ? cuModelIdx : 0);
+        cuAgentGroup.add(cuModelDropdown);
+
         const cuProviderEntry = new Adw.EntryRow({
             title: 'Provider ID',
         });
@@ -155,6 +283,39 @@ export default class AetherPreferences extends ExtensionPreferences {
         });
         cuModelEntry.set_text(cuExisting.modelId || '');
         cuAgentGroup.add(cuModelEntry);
+
+        cuModelDropdown.connect('notify::selected', () => {
+            const sel = cuModelDropdown.get_selected();
+            if (sel === 0) {
+                cuModelSlug = '';
+            } else {
+                const slug = cuModelChoices[sel];
+                const mc = models[slug];
+                if (mc) {
+                    cuModelSlug = slug;
+                    cuProviderEntry.set_text(mc.providerId);
+                    cuModelEntry.set_text(mc.modelId);
+                }
+            }
+        });
+
+        // Backup model dropdown
+        const cuBackupChoices = ['(None)', '(Manual)', ...modelSlugs];
+        const cuBackupListData = new Gtk.StringList();
+        for (const c of cuBackupChoices)
+            cuBackupListData.append(c);
+        const cuBackupDropdown = new Adw.ComboRow({
+            title: 'Backup Model',
+            subtitle: 'Fallback when the main model fails',
+            model: cuBackupListData,
+        });
+        let cuBackupIdx = 0;
+        if (cuBackupModelSlug && cuBackupChoices.indexOf(cuBackupModelSlug) >= 0)
+            cuBackupIdx = cuBackupChoices.indexOf(cuBackupModelSlug);
+        else if (cuExisting.backupProviderId)
+            cuBackupIdx = 1;
+        cuBackupDropdown.set_selected(cuBackupIdx);
+        cuAgentGroup.add(cuBackupDropdown);
 
         const cuBackupProviderEntry = new Adw.EntryRow({
             title: 'Backup Provider ID',
@@ -168,17 +329,24 @@ export default class AetherPreferences extends ExtensionPreferences {
         cuBackupModelEntry.set_text(cuExisting.backupModelId || '');
         cuAgentGroup.add(cuBackupModelEntry);
 
-        // Show configured providers as a hint
-        const providerConfigs = this._getProviders();
-        const providerIds = Object.keys(providerConfigs);
-        if (providerIds.length > 0) {
-            const hintRow = new Adw.ActionRow({
-                title: 'Available providers',
-                subtitle: providerIds.join(', '),
-            });
-            hintRow.add_suffix(new Gtk.Image({icon_name: 'dialog-information-symbolic'}));
-            cuAgentGroup.add(hintRow);
-        }
+        cuBackupDropdown.connect('notify::selected', () => {
+            const sel = cuBackupDropdown.get_selected();
+            if (sel === 0) {
+                cuBackupModelSlug = '';
+                cuBackupProviderEntry.set_text('');
+                cuBackupModelEntry.set_text('');
+            } else if (sel === 1) {
+                cuBackupModelSlug = '';
+            } else {
+                const slug = cuBackupChoices[sel];
+                const mc = models[slug];
+                if (mc) {
+                    cuBackupModelSlug = slug;
+                    cuBackupProviderEntry.set_text(mc.providerId);
+                    cuBackupModelEntry.set_text(mc.modelId);
+                }
+            }
+        });
 
         // Save button
         const cuSaveRow = new Adw.ActionRow({
@@ -206,8 +374,10 @@ export default class AetherPreferences extends ExtensionPreferences {
                 name: 'Computer Use',
                 providerId,
                 modelId,
-                systemPrompt: '', // empty = use default agent prompt
+                systemPrompt: '',
+                ...(cuModelSlug ? {modelSlug: cuModelSlug} : {}),
                 ...(backupProv && backupMod ? {backupProviderId: backupProv, backupModelId: backupMod} : {}),
+                ...(cuBackupModelSlug ? {backupModelSlug: cuBackupModelSlug} : {}),
             };
             this._saveAgentConfigs(configs);
             // Update the subtitle to confirm save
@@ -337,6 +507,24 @@ export default class AetherPreferences extends ExtensionPreferences {
         const repairConfigs = this._getAgentConfigs();
         const repairExisting = repairConfigs['auto-repair'] || {};
 
+        // Track selected model slugs
+        let repairModelSlug = repairExisting.modelSlug || '';
+        let repairBackupModelSlug = repairExisting.backupModelSlug || '';
+
+        // Main model dropdown
+        const repairModelChoices = ['(Manual)', ...modelSlugs];
+        const repairModelListData = new Gtk.StringList();
+        for (const c of repairModelChoices)
+            repairModelListData.append(c);
+        const repairModelDropdown = new Adw.ComboRow({
+            title: 'Model',
+            subtitle: 'Select from registry or configure manually below',
+            model: repairModelListData,
+        });
+        const repairModelIdx = repairModelSlug ? repairModelChoices.indexOf(repairModelSlug) : 0;
+        repairModelDropdown.set_selected(repairModelIdx >= 0 ? repairModelIdx : 0);
+        repairAgentGroup.add(repairModelDropdown);
+
         const repairProviderEntry = new Adw.EntryRow({
             title: 'Provider ID',
         });
@@ -348,6 +536,39 @@ export default class AetherPreferences extends ExtensionPreferences {
         });
         repairModelEntry.set_text(repairExisting.modelId || '');
         repairAgentGroup.add(repairModelEntry);
+
+        repairModelDropdown.connect('notify::selected', () => {
+            const sel = repairModelDropdown.get_selected();
+            if (sel === 0) {
+                repairModelSlug = '';
+            } else {
+                const slug = repairModelChoices[sel];
+                const mc = models[slug];
+                if (mc) {
+                    repairModelSlug = slug;
+                    repairProviderEntry.set_text(mc.providerId);
+                    repairModelEntry.set_text(mc.modelId);
+                }
+            }
+        });
+
+        // Backup model dropdown
+        const repairBackupChoices = ['(None)', '(Manual)', ...modelSlugs];
+        const repairBackupListData = new Gtk.StringList();
+        for (const c of repairBackupChoices)
+            repairBackupListData.append(c);
+        const repairBackupDropdown = new Adw.ComboRow({
+            title: 'Backup Model',
+            subtitle: 'Fallback when the main model fails',
+            model: repairBackupListData,
+        });
+        let repairBackupIdx = 0;
+        if (repairBackupModelSlug && repairBackupChoices.indexOf(repairBackupModelSlug) >= 0)
+            repairBackupIdx = repairBackupChoices.indexOf(repairBackupModelSlug);
+        else if (repairExisting.backupProviderId)
+            repairBackupIdx = 1;
+        repairBackupDropdown.set_selected(repairBackupIdx);
+        repairAgentGroup.add(repairBackupDropdown);
 
         const repairBackupProviderEntry = new Adw.EntryRow({
             title: 'Backup Provider ID',
@@ -361,17 +582,24 @@ export default class AetherPreferences extends ExtensionPreferences {
         repairBackupModelEntry.set_text(repairExisting.backupModelId || '');
         repairAgentGroup.add(repairBackupModelEntry);
 
-        // Show configured providers as a hint
-        const repairProviderConfigs = this._getProviders();
-        const repairProviderIds = Object.keys(repairProviderConfigs);
-        if (repairProviderIds.length > 0) {
-            const repairHintRow = new Adw.ActionRow({
-                title: 'Available providers',
-                subtitle: repairProviderIds.join(', '),
-            });
-            repairHintRow.add_suffix(new Gtk.Image({icon_name: 'dialog-information-symbolic'}));
-            repairAgentGroup.add(repairHintRow);
-        }
+        repairBackupDropdown.connect('notify::selected', () => {
+            const sel = repairBackupDropdown.get_selected();
+            if (sel === 0) {
+                repairBackupModelSlug = '';
+                repairBackupProviderEntry.set_text('');
+                repairBackupModelEntry.set_text('');
+            } else if (sel === 1) {
+                repairBackupModelSlug = '';
+            } else {
+                const slug = repairBackupChoices[sel];
+                const mc = models[slug];
+                if (mc) {
+                    repairBackupModelSlug = slug;
+                    repairBackupProviderEntry.set_text(mc.providerId);
+                    repairBackupModelEntry.set_text(mc.modelId);
+                }
+            }
+        });
 
         // Fallback info row
         const fallbackRow = new Adw.ActionRow({
@@ -408,7 +636,9 @@ export default class AetherPreferences extends ExtensionPreferences {
                 providerId,
                 modelId,
                 systemPrompt: '',
+                ...(repairModelSlug ? {modelSlug: repairModelSlug} : {}),
                 ...(rBackupProv && rBackupMod ? {backupProviderId: rBackupProv, backupModelId: rBackupMod} : {}),
+                ...(repairBackupModelSlug ? {backupModelSlug: repairBackupModelSlug} : {}),
             };
             this._saveAgentConfigs(configs);
             repairSaveRow.set_subtitle(`Saved: ${providerId} / ${modelId}`);
@@ -871,6 +1101,230 @@ export default class AetherPreferences extends ExtensionPreferences {
         dialog.present(this._window);
     }
 
+    // ── Models Registry Management ──
+
+    _getModels() {
+        try {
+            return JSON.parse(this._settings.get_string('models') || '{}');
+        } catch {
+            return {};
+        }
+    }
+
+    _saveModels(models) {
+        this._settings.set_string('models', JSON.stringify(models));
+    }
+
+    _buildModelList() {
+        for (const row of this._modelRows)
+            this._modelListGroup.remove(row);
+        this._modelRows = [];
+
+        const models = this._getModels();
+        const providers = this._getProviders();
+
+        for (const [slug, cfg] of Object.entries(models)) {
+            const provName = providers[cfg.providerId]?.name || cfg.providerId;
+            const visionTag = cfg.isVision ? '  [vision]' : '';
+            const row = new Adw.ActionRow({
+                title: `${cfg.name || slug}`,
+                subtitle: `${provName} / ${cfg.modelId}  |  Context: ${(cfg.maxContext || 128000).toLocaleString()}${visionTag}`,
+            });
+
+            const editBtn = new Gtk.Button({
+                icon_name: 'document-edit-symbolic',
+                valign: Gtk.Align.CENTER,
+                css_classes: ['flat', 'circular'],
+                tooltip_text: `Edit ${slug}`,
+            });
+            editBtn.connect('clicked', () => this._showEditModelDialog(slug, cfg));
+            row.add_suffix(editBtn);
+
+            const deleteBtn = new Gtk.Button({
+                icon_name: 'user-trash-symbolic',
+                valign: Gtk.Align.CENTER,
+                css_classes: ['flat', 'circular'],
+                tooltip_text: `Remove ${slug}`,
+            });
+            deleteBtn.connect('clicked', () => {
+                const m = this._getModels();
+                delete m[slug];
+                this._saveModels(m);
+                this._buildModelList();
+            });
+            row.add_suffix(deleteBtn);
+
+            this._modelListGroup.add(row);
+            this._modelRows.push(row);
+        }
+
+        if (Object.keys(models).length === 0) {
+            const emptyRow = new Adw.ActionRow({
+                title: 'No models registered',
+                subtitle: 'Click "Add Model" below to register one',
+            });
+            this._modelListGroup.add(emptyRow);
+            this._modelRows.push(emptyRow);
+        }
+    }
+
+    _showAddModelDialog() {
+        const dialog = new Adw.AlertDialog({
+            heading: 'Add Model',
+            body: 'Register a model with its provider, API ID, and context limit',
+        });
+
+        const box = new Gtk.Box({
+            orientation: Gtk.Orientation.VERTICAL,
+            spacing: 12,
+            margin_start: 12,
+            margin_end: 12,
+            margin_top: 8,
+            margin_bottom: 8,
+        });
+
+        const slugEntry = new Gtk.Entry({placeholder_text: 'Slug (e.g., sonnet, gpt4o, gemini-flash)'});
+        const nameEntry = new Gtk.Entry({placeholder_text: 'Display name (e.g., Claude Sonnet 4)'});
+
+        // Provider dropdown
+        const providers = this._getProviders();
+        const providerIds = Object.keys(providers);
+        const providerList = new Gtk.StringList();
+        for (const id of providerIds)
+            providerList.append(id);
+        const providerLabel = new Gtk.Label({label: 'Provider:', halign: Gtk.Align.START});
+        const providerDropdown = new Gtk.DropDown({model: providerList});
+
+        const modelIdEntry = new Gtk.Entry({placeholder_text: 'API Model ID (e.g., anthropic/claude-sonnet-4)'});
+        const contextLabel = new Gtk.Label({label: 'Max Context Tokens:', halign: Gtk.Align.START});
+        const contextSpin = new Gtk.SpinButton({
+            adjustment: new Gtk.Adjustment({
+                lower: 1000, upper: 2000000,
+                step_increment: 1000, value: 128000,
+            }),
+        });
+        const visionCheck = new Gtk.CheckButton({label: 'Vision capable'});
+
+        box.append(slugEntry);
+        box.append(nameEntry);
+        box.append(providerLabel);
+        if (providerIds.length > 0)
+            box.append(providerDropdown);
+        else
+            box.append(new Gtk.Label({label: '(No providers configured)', css_classes: ['dim-label']}));
+        box.append(modelIdEntry);
+        box.append(contextLabel);
+        box.append(contextSpin);
+        box.append(visionCheck);
+
+        dialog.set_extra_child(box);
+        dialog.add_response('cancel', 'Cancel');
+        dialog.add_response('add', 'Add');
+        dialog.set_response_appearance('add', Adw.ResponseAppearance.SUGGESTED);
+
+        dialog.connect('response', (_dlg, response) => {
+            if (response === 'add') {
+                const slug = slugEntry.get_text().trim().toLowerCase().replace(/[^a-z0-9_-]/g, '-');
+                const name = nameEntry.get_text().trim();
+                const providerId = providerIds.length > 0
+                    ? providerIds[providerDropdown.get_selected()] : '';
+                const modelId = modelIdEntry.get_text().trim();
+                const maxContext = contextSpin.get_value();
+                const isVision = visionCheck.get_active();
+
+                if (slug && providerId && modelId) {
+                    const mdls = this._getModels();
+                    mdls[slug] = {name: name || slug, providerId, modelId, maxContext, isVision};
+                    this._saveModels(mdls);
+                    this._buildModelList();
+                }
+            }
+        });
+
+        dialog.present(this._window);
+    }
+
+    _showEditModelDialog(slug, cfg) {
+        const dialog = new Adw.AlertDialog({
+            heading: `Edit Model: ${cfg.name || slug}`,
+            body: `Editing model "${slug}"`,
+        });
+
+        const box = new Gtk.Box({
+            orientation: Gtk.Orientation.VERTICAL,
+            spacing: 12,
+            margin_start: 12,
+            margin_end: 12,
+            margin_top: 8,
+            margin_bottom: 8,
+        });
+
+        const nameEntry = new Gtk.Entry({
+            placeholder_text: 'Display name',
+            text: cfg.name || slug,
+        });
+
+        const providers = this._getProviders();
+        const providerIds = Object.keys(providers);
+        const providerList = new Gtk.StringList();
+        for (const id of providerIds)
+            providerList.append(id);
+        const providerLabel = new Gtk.Label({label: 'Provider:', halign: Gtk.Align.START});
+        const providerDropdown = new Gtk.DropDown({model: providerList});
+        const currentProvIdx = providerIds.indexOf(cfg.providerId);
+        if (currentProvIdx >= 0)
+            providerDropdown.set_selected(currentProvIdx);
+
+        const modelIdEntry = new Gtk.Entry({
+            placeholder_text: 'API Model ID',
+            text: cfg.modelId || '',
+        });
+
+        const contextLabel = new Gtk.Label({label: 'Max Context Tokens:', halign: Gtk.Align.START});
+        const contextSpin = new Gtk.SpinButton({
+            adjustment: new Gtk.Adjustment({
+                lower: 1000, upper: 2000000,
+                step_increment: 1000, value: cfg.maxContext || 128000,
+            }),
+        });
+
+        const visionCheck = new Gtk.CheckButton({label: 'Vision capable', active: cfg.isVision || false});
+
+        box.append(nameEntry);
+        box.append(providerLabel);
+        if (providerIds.length > 0)
+            box.append(providerDropdown);
+        box.append(modelIdEntry);
+        box.append(contextLabel);
+        box.append(contextSpin);
+        box.append(visionCheck);
+
+        dialog.set_extra_child(box);
+        dialog.add_response('cancel', 'Cancel');
+        dialog.add_response('save', 'Save');
+        dialog.set_response_appearance('save', Adw.ResponseAppearance.SUGGESTED);
+
+        dialog.connect('response', (_dlg, response) => {
+            if (response === 'save') {
+                const name = nameEntry.get_text().trim();
+                const providerId = providerIds.length > 0
+                    ? providerIds[providerDropdown.get_selected()] : cfg.providerId;
+                const modelId = modelIdEntry.get_text().trim();
+                const maxContext = contextSpin.get_value();
+                const isVision = visionCheck.get_active();
+
+                if (providerId && modelId) {
+                    const mdls = this._getModels();
+                    mdls[slug] = {name: name || slug, providerId, modelId, maxContext, isVision};
+                    this._saveModels(mdls);
+                    this._buildModelList();
+                }
+            }
+        });
+
+        dialog.present(this._window);
+    }
+
     // ── Agent List Management ──
 
     _getAgentConfigs() {
@@ -899,12 +1353,18 @@ export default class AetherPreferences extends ExtensionPreferences {
             if (DEDICATED_AGENTS.includes(id))
                 continue;
 
-            const backupInfo = cfg.backupProviderId
-                ? `  |  Backup: ${cfg.backupProviderId}/${cfg.backupModelId}`
-                : '';
+            // Show model slug if available, otherwise provider/model
+            const modelInfo = cfg.modelSlug
+                ? `Model: ${cfg.modelSlug}`
+                : `Provider: ${cfg.providerId}  |  Model: ${cfg.modelId}`;
+            const backupInfo = cfg.backupModelSlug
+                ? `  |  Backup: ${cfg.backupModelSlug}`
+                : (cfg.backupProviderId
+                    ? `  |  Backup: ${cfg.backupProviderId}/${cfg.backupModelId}`
+                    : '');
             const row = new Adw.ActionRow({
                 title: cfg.name || id,
-                subtitle: `Provider: ${cfg.providerId}  |  Model: ${cfg.modelId}${backupInfo}`,
+                subtitle: `${modelInfo}${backupInfo}`,
             });
 
             // Edit button
@@ -966,10 +1426,68 @@ export default class AetherPreferences extends ExtensionPreferences {
 
         const idEntry = new Gtk.Entry({placeholder_text: 'Agent ID (e.g., researcher)'});
         const nameEntry = new Gtk.Entry({placeholder_text: 'Display name (e.g., Researcher)'});
+
+        // Model dropdown from registry
+        const models = this._getModels();
+        const slugs = Object.keys(models);
+        const modelChoices = ['(Manual)', ...slugs];
+        const modelList = new Gtk.StringList();
+        for (const c of modelChoices)
+            modelList.append(c);
+        const modelLabel = new Gtk.Label({label: 'Model (from registry):', halign: Gtk.Align.START});
+        const modelDropdown = new Gtk.DropDown({model: modelList});
+
         const providerEntry = new Gtk.Entry({placeholder_text: 'Provider ID (must match an existing provider)'});
         const modelEntry = new Gtk.Entry({placeholder_text: 'Model ID (e.g., anthropic/claude-sonnet-4)'});
+
+        // Backup model dropdown
+        const backupChoices = ['(None)', '(Manual)', ...slugs];
+        const backupList = new Gtk.StringList();
+        for (const c of backupChoices)
+            backupList.append(c);
+        const backupLabel = new Gtk.Label({label: 'Backup Model:', halign: Gtk.Align.START});
+        const backupDropdown = new Gtk.DropDown({model: backupList});
+
         const backupProviderEntry = new Gtk.Entry({placeholder_text: 'Backup Provider ID (optional)'});
         const backupModelEntry = new Gtk.Entry({placeholder_text: 'Backup Model ID (optional)'});
+
+        // Wire model dropdown → auto-fill entries
+        let selectedModelSlug = '';
+        let selectedBackupSlug = '';
+
+        modelDropdown.connect('notify::selected', () => {
+            const sel = modelDropdown.get_selected();
+            if (sel === 0) {
+                selectedModelSlug = '';
+            } else {
+                const slug = modelChoices[sel];
+                const mc = models[slug];
+                if (mc) {
+                    selectedModelSlug = slug;
+                    providerEntry.set_text(mc.providerId);
+                    modelEntry.set_text(mc.modelId);
+                }
+            }
+        });
+
+        backupDropdown.connect('notify::selected', () => {
+            const sel = backupDropdown.get_selected();
+            if (sel === 0) {
+                selectedBackupSlug = '';
+                backupProviderEntry.set_text('');
+                backupModelEntry.set_text('');
+            } else if (sel === 1) {
+                selectedBackupSlug = '';
+            } else {
+                const slug = backupChoices[sel];
+                const mc = models[slug];
+                if (mc) {
+                    selectedBackupSlug = slug;
+                    backupProviderEntry.set_text(mc.providerId);
+                    backupModelEntry.set_text(mc.modelId);
+                }
+            }
+        });
 
         const promptLabel = new Gtk.Label({
             label: 'System Prompt:',
@@ -990,8 +1508,12 @@ export default class AetherPreferences extends ExtensionPreferences {
 
         box.append(idEntry);
         box.append(nameEntry);
+        box.append(modelLabel);
+        box.append(modelDropdown);
         box.append(providerEntry);
         box.append(modelEntry);
+        box.append(backupLabel);
+        box.append(backupDropdown);
         box.append(backupProviderEntry);
         box.append(backupModelEntry);
         box.append(promptLabel);
@@ -1018,7 +1540,9 @@ export default class AetherPreferences extends ExtensionPreferences {
                     const bMod = backupModelEntry.get_text().trim();
                     configs[id] = {
                         name: name || id, providerId, modelId, systemPrompt,
+                        ...(selectedModelSlug ? {modelSlug: selectedModelSlug} : {}),
                         ...(bProv && bMod ? {backupProviderId: bProv, backupModelId: bMod} : {}),
+                        ...(selectedBackupSlug ? {backupModelSlug: selectedBackupSlug} : {}),
                     };
                     this._saveAgentConfigs(configs);
                     this._buildAgentList();
@@ -1048,6 +1572,19 @@ export default class AetherPreferences extends ExtensionPreferences {
             placeholder_text: 'Display name',
             text: cfg.name || id,
         });
+
+        // Model dropdown from registry
+        const models = this._getModels();
+        const slugs = Object.keys(models);
+        const modelChoices = ['(Manual)', ...slugs];
+        const modelList = new Gtk.StringList();
+        for (const c of modelChoices)
+            modelList.append(c);
+        const modelLabel = new Gtk.Label({label: 'Model (from registry):', halign: Gtk.Align.START});
+        const modelDropdown = new Gtk.DropDown({model: modelList});
+        const currentModelIdx = cfg.modelSlug ? modelChoices.indexOf(cfg.modelSlug) : 0;
+        modelDropdown.set_selected(currentModelIdx >= 0 ? currentModelIdx : 0);
+
         const providerEntry = new Gtk.Entry({
             placeholder_text: 'Provider ID',
             text: cfg.providerId || '',
@@ -1056,6 +1593,21 @@ export default class AetherPreferences extends ExtensionPreferences {
             placeholder_text: 'Model ID',
             text: cfg.modelId || '',
         });
+
+        // Backup model dropdown
+        const backupChoices = ['(None)', '(Manual)', ...slugs];
+        const backupList = new Gtk.StringList();
+        for (const c of backupChoices)
+            backupList.append(c);
+        const backupLabel = new Gtk.Label({label: 'Backup Model:', halign: Gtk.Align.START});
+        const backupDropdown = new Gtk.DropDown({model: backupList});
+        let backupIdx = 0;
+        if (cfg.backupModelSlug && backupChoices.indexOf(cfg.backupModelSlug) >= 0)
+            backupIdx = backupChoices.indexOf(cfg.backupModelSlug);
+        else if (cfg.backupProviderId)
+            backupIdx = 1;
+        backupDropdown.set_selected(backupIdx);
+
         const backupProviderEntry = new Gtk.Entry({
             placeholder_text: 'Backup Provider ID (optional)',
             text: cfg.backupProviderId || '',
@@ -1063,6 +1615,44 @@ export default class AetherPreferences extends ExtensionPreferences {
         const backupModelEntry = new Gtk.Entry({
             placeholder_text: 'Backup Model ID (optional)',
             text: cfg.backupModelId || '',
+        });
+
+        // Wire dropdowns
+        let selectedModelSlug = cfg.modelSlug || '';
+        let selectedBackupSlug = cfg.backupModelSlug || '';
+
+        modelDropdown.connect('notify::selected', () => {
+            const sel = modelDropdown.get_selected();
+            if (sel === 0) {
+                selectedModelSlug = '';
+            } else {
+                const slug = modelChoices[sel];
+                const mc = models[slug];
+                if (mc) {
+                    selectedModelSlug = slug;
+                    providerEntry.set_text(mc.providerId);
+                    modelEntry.set_text(mc.modelId);
+                }
+            }
+        });
+
+        backupDropdown.connect('notify::selected', () => {
+            const sel = backupDropdown.get_selected();
+            if (sel === 0) {
+                selectedBackupSlug = '';
+                backupProviderEntry.set_text('');
+                backupModelEntry.set_text('');
+            } else if (sel === 1) {
+                selectedBackupSlug = '';
+            } else {
+                const slug = backupChoices[sel];
+                const mc = models[slug];
+                if (mc) {
+                    selectedBackupSlug = slug;
+                    backupProviderEntry.set_text(mc.providerId);
+                    backupModelEntry.set_text(mc.modelId);
+                }
+            }
         });
 
         const promptLabel = new Gtk.Label({
@@ -1080,8 +1670,12 @@ export default class AetherPreferences extends ExtensionPreferences {
         });
 
         box.append(nameEntry);
+        box.append(modelLabel);
+        box.append(modelDropdown);
         box.append(providerEntry);
         box.append(modelEntry);
+        box.append(backupLabel);
+        box.append(backupDropdown);
         box.append(backupProviderEntry);
         box.append(backupModelEntry);
         box.append(promptLabel);
@@ -1107,7 +1701,9 @@ export default class AetherPreferences extends ExtensionPreferences {
                     const bMod = backupModelEntry.get_text().trim();
                     configs[id] = {
                         name: name || id, providerId, modelId, systemPrompt,
+                        ...(selectedModelSlug ? {modelSlug: selectedModelSlug} : {}),
                         ...(bProv && bMod ? {backupProviderId: bProv, backupModelId: bMod} : {}),
+                        ...(selectedBackupSlug ? {backupModelSlug: selectedBackupSlug} : {}),
                     };
                     this._saveAgentConfigs(configs);
                     this._buildAgentList();

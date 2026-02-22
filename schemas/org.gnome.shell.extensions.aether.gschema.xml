@@ -39,6 +39,25 @@
       <description>Model to use with the backup provider.</description>
     </key>
 
+    <!-- Models Registry -->
+    <key name="models" type="s">
+      <default>'{}'</default>
+      <summary>Models Registry</summary>
+      <description>JSON mapping model slugs to config: {slug: {name, providerId, modelId, maxContext, isVision}}</description>
+    </key>
+
+    <key name="active-model-slug" type="s">
+      <default>''</default>
+      <summary>Active model slug</summary>
+      <description>Model slug from the registry for the main AI. Overrides active-provider/active-model when set.</description>
+    </key>
+
+    <key name="backup-model-slug" type="s">
+      <default>''</default>
+      <summary>Backup model slug</summary>
+      <description>Model slug from the registry for backup. Overrides backup-provider/backup-model when set.</description>
+    </key>
+
     <!-- Context / Summarization -->
     <key name="auto-summarize" type="b">
       <default>true</default>
