@@ -1126,9 +1126,10 @@ export default class AetherPreferences extends ExtensionPreferences {
         for (const [slug, cfg] of Object.entries(models)) {
             const provName = providers[cfg.providerId]?.name || cfg.providerId;
             const visionTag = cfg.isVision ? '  [vision]' : '';
+            const noToolsTag = cfg.supportsTools === false ? '  [no-tools]' : '';
             const row = new Adw.ActionRow({
                 title: `${cfg.name || slug}`,
-                subtitle: `${provName} / ${cfg.modelId}  |  Context: ${(cfg.maxContext || 128000).toLocaleString()}${visionTag}`,
+                subtitle: `${provName} / ${cfg.modelId}  |  Context: ${(cfg.maxContext || 128000).toLocaleString()}${visionTag}${noToolsTag}`,
             });
 
             const editBtn = new Gtk.Button({
@@ -1204,6 +1205,7 @@ export default class AetherPreferences extends ExtensionPreferences {
             }),
         });
         const visionCheck = new Gtk.CheckButton({label: 'Vision capable'});
+        const toolsCheck = new Gtk.CheckButton({label: 'Supports tools / function calling', active: true});
 
         box.append(slugEntry);
         box.append(nameEntry);
@@ -1216,6 +1218,7 @@ export default class AetherPreferences extends ExtensionPreferences {
         box.append(contextLabel);
         box.append(contextSpin);
         box.append(visionCheck);
+        box.append(toolsCheck);
 
         dialog.set_extra_child(box);
         dialog.add_response('cancel', 'Cancel');
@@ -1231,10 +1234,11 @@ export default class AetherPreferences extends ExtensionPreferences {
                 const modelId = modelIdEntry.get_text().trim();
                 const maxContext = contextSpin.get_value();
                 const isVision = visionCheck.get_active();
+                const supportsTools = toolsCheck.get_active();
 
                 if (slug && providerId && modelId) {
                     const mdls = this._getModels();
-                    mdls[slug] = {name: name || slug, providerId, modelId, maxContext, isVision};
+                    mdls[slug] = {name: name || slug, providerId, modelId, maxContext, isVision, supportsTools};
                     this._saveModels(mdls);
                     this._buildModelList();
                 }
@@ -1289,6 +1293,7 @@ export default class AetherPreferences extends ExtensionPreferences {
         });
 
         const visionCheck = new Gtk.CheckButton({label: 'Vision capable', active: cfg.isVision || false});
+        const toolsCheck = new Gtk.CheckButton({label: 'Supports tools / function calling', active: cfg.supportsTools !== false});
 
         box.append(nameEntry);
         box.append(providerLabel);
@@ -1298,6 +1303,7 @@ export default class AetherPreferences extends ExtensionPreferences {
         box.append(contextLabel);
         box.append(contextSpin);
         box.append(visionCheck);
+        box.append(toolsCheck);
 
         dialog.set_extra_child(box);
         dialog.add_response('cancel', 'Cancel');
@@ -1312,10 +1318,11 @@ export default class AetherPreferences extends ExtensionPreferences {
                 const modelId = modelIdEntry.get_text().trim();
                 const maxContext = contextSpin.get_value();
                 const isVision = visionCheck.get_active();
+                const supportsTools = toolsCheck.get_active();
 
                 if (providerId && modelId) {
                     const mdls = this._getModels();
-                    mdls[slug] = {name: name || slug, providerId, modelId, maxContext, isVision};
+                    mdls[slug] = {name: name || slug, providerId, modelId, maxContext, isVision, supportsTools};
                     this._saveModels(mdls);
                     this._buildModelList();
                 }
